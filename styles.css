@@ -1,0 +1,87 @@
+.ink-preview {
+	cursor: pointer;
+	display: block;
+	line-height: 0;
+}
+
+.ink-preview.is-empty {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	line-height: normal;
+	color: var(--text-muted);
+	background: var(--background-secondary);
+	border: 1px dashed var(--background-modifier-border);
+	border-radius: var(--radius-m, 6px);
+	min-height: 3em;
+}
+
+.ink-preview-svg {
+	display: block;
+	color: var(--text-normal);
+}
+
+.ink-error {
+	display: block;
+	padding: 0.5em 0.75em;
+	color: var(--text-error);
+	background: var(--background-secondary);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-m, 6px);
+}
+
+.ink-overlay {
+	position: fixed;
+	inset: 0;
+	z-index: var(--layer-modal, 60);
+	display: flex;
+	flex-direction: column;
+	background: var(--background-primary);
+}
+
+.ink-toolbar {
+	display: flex;
+	align-items: center;
+	gap: 0.5em;
+	padding: 0.5em;
+	border-bottom: 1px solid var(--background-modifier-border);
+	background: var(--background-secondary);
+}
+
+.ink-toolbar button {
+	background: var(--interactive-normal);
+	color: var(--text-normal);
+	border: none;
+	border-radius: var(--radius-s, 4px);
+	padding: 0.4em 0.8em;
+	cursor: pointer;
+}
+
+.ink-toolbar button.is-active {
+	background: var(--interactive-accent);
+	color: var(--text-on-accent);
+}
+
+.ink-toolbar button:disabled {
+	opacity: 0.4;
+	cursor: default;
+}
+
+.ink-toolbar [data-action='done'] {
+	margin-left: auto;
+}
+
+.ink-surface {
+	position: relative;
+	margin: auto;
+	touch-action: none;
+	-webkit-user-select: none;
+	-webkit-touch-callout: none;
+}
+
+.ink-surface canvas {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+}
