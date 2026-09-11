@@ -71,8 +71,8 @@ Single Obsidian plugin project at the repository root: `src/`, `tests/`, `manife
 - [X] T022 Green: implement `src/document/locate.ts` (line scanner per research R7) to pass T021
 - [X] T023 [P] Red: tests for `applyBlockUpdate` and `appendBlock` in `tests/unit/document/update.test.ts`: `updated` result equals `text.slice(0,start) + newLine + text.slice(end)` byte-for-byte; the same line → `unchanged` with identical text; `not-found`/`duplicate` return the input unchanged; CRLF and a `> ` prefix are preserved; `appendBlock` adds exactly one separating newline when the text doesn't end with one and leaves existing text untouched (uses `locateBlock`: can be written alongside T021, run after T022)
 - [X] T024 Green: implement `src/document/update.ts` to pass T023
-- [ ] T025 [P] Red: tests for `strokeOutlinePath` in `tests/unit/render/outline.test.ts`: returns a non-empty path starting with `M` and ending with `Z`; a single-point stroke gives a closed dot path; deterministic output; a stroke with pressure 230 yields a wider outline than the same stroke at pressure 50 (compare the bounding box of the path's numbers)
-- [ ] T026 Green: implement `src/render/outline.ts` with perfect-freehand options from research R9 (pressure = `p / 255`) and quadratic-curve path conversion to pass T025
+- [X] T025 [P] Red: tests for `strokeOutlinePath` in `tests/unit/render/outline.test.ts`: returns a non-empty path starting with `M` and ending with `Z`; a single-point stroke gives a closed dot path; deterministic output; a stroke with pressure 230 yields a wider outline than the same stroke at pressure 50 (compare the bounding box of the path's numbers)
+- [X] T026 Green: implement `src/render/outline.ts` with perfect-freehand options from research R9 (pressure = `p / 255`) and quadratic-curve path conversion to pass T025
 
 **Checkpoint**: `npm test` green. Format, location/update and outlines are ready.
 
