@@ -254,8 +254,8 @@ eraser becomes active and the toolbar shows it. Repeat; the pen is active again.
 - **FR-024**: A save MUST be applied as a single atomic update to the note, so concurrent edits to
   the note are never overwritten.
 - **FR-025**: If the target block cannot be found, or its identity appears more than once, the save
-  MUST NOT modify the note; the user MUST be notified and offered a way to keep the drawing (insert
-  it as a new block at the cursor).
+  MUST NOT modify the note; the user MUST be notified and offered a way to keep the drawing (append
+  it to the note as a new block).
 - **FR-026**: A dense, full-width block of handwriting MUST add no more than about 30 KB to the note.
 - **FR-027**: Reopening and saving a drawing without changes MUST NOT alter the note.
 - **FR-028**: Drawings saved by any released version of the plugin MUST remain viewable and
