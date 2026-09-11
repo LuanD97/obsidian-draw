@@ -55,9 +55,9 @@ Single Obsidian plugin project at the repository root: `src/`, `tests/`, `manife
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete.
 
-- [ ] T009 [P] Create the shared types `Point`, `Stroke`, `Drawing`, `RawPoint`, `Size` in `src/model/types.ts` (types only)
-- [ ] T010 [P] Red: tests for `writeUvarint`/`writeSvarint`/`ByteReader` in `tests/unit/format/varint.test.ts`: round-trips of 0, 1, 127, 128, 16383, 16384, 2^31−1; zigzag mapping (0→0, −1→1, 1→2, −64, 63, −2^30); `ByteReader.uvarint()` throws on a truncated varint; `done()` is true only after all bytes are read
-- [ ] T011 Green: implement `src/format/varint.ts` to pass T010
+- [X] T009 [P] Create the shared types `Point`, `Stroke`, `Drawing`, `RawPoint`, `Size` in `src/model/types.ts` (types only)
+- [X] T010 [P] Red: tests for `writeUvarint`/`writeSvarint`/`ByteReader` in `tests/unit/format/varint.test.ts`: round-trips of 0, 1, 127, 128, 16383, 16384, 2^31−1; zigzag mapping (0→0, −1→1, 1→2, −64, 63, −2^30); `ByteReader.uvarint()` throws on a truncated varint; `done()` is true only after all bytes are read
+- [X] T011 Green: implement `src/format/varint.ts` to pass T010
 - [ ] T012 [P] Red: tests for `generateId` in `tests/unit/format/id.test.ts`: 8 characters matching `^[0-9a-z]{8}$`; deterministic with an injected random source; bytes ≥ 252 are rejected and redrawn (no modulo bias); 10,000 generated ids are unique
 - [ ] T013 Green: implement `src/format/id.ts` (default source `crypto.getRandomValues`) to pass T012
 - [ ] T014 Red: tests for `encodePayload`/`decodePayload` in `tests/unit/format/codec.test.ts`: empty strokes ↔ `''`; a single-point stroke; several multi-point strokes round-trip exactly; the same input always gives the same string; `decodePayload` throws `DecodeError` kind `malformed` for invalid base64, a corrupt DEFLATE stream, trailing bytes, a truncated varint, `pointCount = 0`, pressure > 255 and coordinates outside `[0,width]×[0,height]` (layout per [contracts/block-format.md](./contracts/block-format.md); depends on T011)
