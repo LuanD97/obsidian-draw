@@ -1,0 +1,9 @@
+{
+	"id": "obsidian-draw",
+	"name": "Draw",
+	"version": "0.1.0",
+	"minAppVersion": "1.5.7",
+	"description": "Handwriting blocks stored inline in your notes, with a full-screen Apple Pencil editor.",
+	"author": "Luan Dinh",
+	"isDesktopOnly": false
+}
