@@ -157,7 +157,9 @@ else was considered. There are no open NEEDS CLARIFICATION items.
   `min(1, availableW / W, availableH / H)`, centred. Pointer coordinates are mapped back to canvas
   units through that scale. Resizing uses a handle at the bottom-right corner (a separate element, so
   a pen on it never draws) and is bounded by: minimum = bounding box of all strokes (plus a 4-unit
-  margin) and at least 64 × 64; maximum = the available area at scale 1. Rotation or window resize
+  margin) and at least 64 × 64; maximum = the larger of the current size and the available area at
+  scale 1, capped at 4096, so a resize never shrinks a canvas just because the screen is smaller;
+  when minimum exceeds maximum, minimum wins. Rotation or window resize
   just recomputes the fit. Each resize is one undo step.
 - **Rationale**: Fitting instead of panning avoids a pan/zoom feature (out of scope) and handles
   rotation without distortion. Keeping scale 1 whenever the canvas fits makes handwriting size in

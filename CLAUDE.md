@@ -3,8 +3,11 @@
 An Obsidian plugin for handwriting with Apple Pencil on iPad, where the drawings are
 stored **inline in the note's `.md` file** rather than as separate `.svg`/drawing files.
 
-Status: design agreed in conversation, no code written yet. The repo is empty apart
-from a placeholder `README.md`.
+Status: the v1 feature is fully specified but not implemented yet. Everything lives in
+`specs/001-inline-handwriting-blocks/` (spec, plan, research, data model, contracts, quickstart,
+tasks) on branch `001-inline-handwriting-blocks`. Implement by following `tasks.md` in order.
+Project rules are in `.specify/memory/constitution.md` (v1.1.0): test-first for all logic,
+with thin glue exempt. Where these notes and the spec differ, the spec and constitution win.
 
 ## Why this exists
 
@@ -32,16 +35,16 @@ from a placeholder `README.md`.
 
 ````md
 ```ink
-v1;700x260;<base64 of compressed, delta-encoded strokes>
+v1;id=k3f9x2ab;700x260;<base64 of compressed, delta-encoded strokes>
 ```
 ````
 
 - The data is kept on **one line** so git's line-based merge still works when different
   parts of the same note change on different devices. A conflict only occurs if the same
   drawing is edited on both devices.
-- Each block needs a stable **id** so a save can find it again after the file has changed
-  underneath. Put it in the header, e.g. `v1;id=a8f3;700x260;...`. The exact format is
-  still open; finalise it in the first implementation.
+- Each block has a stable 8-character **id** (`[0-9a-z]{8}`) in its header, so a save can find
+  it again after the file has changed underneath. The v1 format is final and specified in
+  `specs/001-inline-handwriting-blocks/contracts/block-format.md`; it is frozen once released.
 - Encoding pipeline:
   1. Simplify each stroke with Ramer–Douglas–Peucker.
   2. Round coordinates to integers and delta-encode them, keeping pressure.
@@ -98,6 +101,9 @@ v1;700x260;<base64 of compressed, delta-encoded strokes>
     This does not reproduce Pencil behaviour.
 
 ## Suggested next steps
+
+For v1, steps 1–5 are superseded by `specs/001-inline-handwriting-blocks/tasks.md`. The
+"Later / optional" items remain future work.
 
 1. Scaffold the plugin: manifest, esbuild config, `main.ts` with the code block
    processor and the insert command.

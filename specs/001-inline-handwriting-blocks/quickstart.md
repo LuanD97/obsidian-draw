@@ -56,7 +56,9 @@ Run each after deploying. Record pass/fail with the date and plugin commit in th
 1. **Insert**: in a note, run "Insert handwriting block" from the mobile toolbar. The overlay opens
    within about a second; the canvas is as wide as the note text. (US1, SC-001)
 2. **Write**: write a sentence. Ink follows the tip with no visible lag and varies with pressure.
-   (US1, SC-002)
+   Then measure: in Safari on the Mac → Develop → [iPad] → Obsidian → Timelines, record 10 s of
+   continuous writing. Pass if the `pointermove` handler is ≤ 4 ms at p95 and the frame track shows
+   no dropped frames while writing. (US1, SC-002)
 3. **Palm and fingers**: write a full canvas with your palm resting on the screen; tap the canvas with
    a finger. No stray marks. (FR-011, SC-007)
 4. **Hover**: hold the Pencil just above the screen and move it. Nothing is drawn.

@@ -66,7 +66,7 @@ Owns one drawing while the overlay is open.
 
 | Field | Type | Notes |
 |-------|------|-------|
-| `file` | note path | Where the block lives |
+| `file` | Obsidian file object (`TFile`) | Where the block lives. Obsidian keeps this object current across renames and moves, so the session never stores a path |
 | `id` | string | Target block id (may change once, after "Append to note") |
 | `drawing` | Drawing | Current state |
 | `tool` | `'pen' \| 'eraser'` | Starts as `pen` |
@@ -92,10 +92,19 @@ Owns one drawing while the overlay is open.
 
 - Closing from `clean` closes immediately without touching the note (FR-027).
 - Closing from `dirty`/`saving` flushes and waits; if the result is `orphaned`, the overlay stays open.
+- The outcome of every save, whether an autosave or a flush, reaches the session through the save
+  queue's `onOutcome`, so `orphaned` is entered as soon as any save fails, not only on Done.
+  Autosave is paused while orphaned.
+- The save function reads `session.id` each time it runs, so saves follow the id switch after
+  "Append to note".
+- A save on a note that no longer exists returns `file-missing` → `orphaned`. The banner then offers
+  "Copy drawing to clipboard" (a complete block with a fresh id) instead of "Append to note".
 
 ## CanvasSize rules
 
 - **Default on insert**: `width = clamp(measuredColumnWidth, 200, 2000)` (fallback 700), `height = 260`.
 - **Minimum while resizing**: `max(64, strokesBBox.right + 4)` × `max(64, strokesBBox.bottom + 4)`.
-- **Maximum while resizing**: the overlay's available area at scale 1, and never above 4096.
+- **Maximum while resizing**: the larger of the current size and the overlay's available area at
+  scale 1, never above 4096 (a canvas is never shrunk just because the screen is smaller).
+- **Conflict rule**: if the minimum exceeds the maximum, the minimum wins; strokes are never cut off.
 - **Display scale** (editor and preview): `min(1, availableWidth / width[, availableHeight / height])`.

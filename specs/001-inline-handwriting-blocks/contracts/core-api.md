@@ -2,7 +2,8 @@
 
 Signatures of the pure, headless-testable modules (constitution I). These are the targets of the
 test-first tasks; Obsidian and DOM glue call only these. Names are binding for v1; internal helpers
-are free to change.
+are free to change. None of these modules imports a runtime value from `obsidian` (the npm package
+is types-only); they use `import type` only, and runtime Obsidian classes live in `src/main.ts` glue.
 
 ```ts
 // src/model/types.ts
@@ -20,9 +21,11 @@ export class ByteReader { constructor(bytes: Uint8Array); uvarint(): number; sva
 export function encodePayload(strokes: Stroke[]): string;                       // base64, '' if empty
 export function decodePayload(payload: string, width: number, height: number): Stroke[]; // throws DecodeError
 
-// src/format/block-line.ts
+// src/format/errors.ts  (shared by codec and block-line; re-exported from block-line.ts)
 export type DecodeErrorKind = 'malformed' | 'unsupported-version';
 export class DecodeError extends Error { kind: DecodeErrorKind }
+
+// src/format/block-line.ts
 export function formatBlockLine(d: Drawing): string;
 export function parseBlockLine(line: string): Drawing;                          // throws DecodeError
 export function newBlockMarkdown(d: Drawing): string;                           // "```ink\n<line>\n```\n"
@@ -52,9 +55,12 @@ export class History {
 }
 
 // src/model/canvas-size.ts
+export function contentWidth(clientWidth: number, paddingLeft: number, paddingRight: number): number;
 export function defaultSize(measuredColumnWidth: number | null): Size;
 export function minSize(strokes: Stroke[]): Size;
-export function clampSize(want: Size, min: Size, max: Size): Size;
+export function clampSize(want: Size, min: Size, max: Size): Size;           // min wins when min > max
+export function resizeBounds(current: Size, strokes: Stroke[], available: Size): { min: Size; max: Size };
+                                                                    // max = larger of current/available, ≤ 4096
 export function fitScale(size: Size, available: Size): number;                 // ≤ 1
 
 // src/document/locate.ts
@@ -84,10 +90,20 @@ export function buildPreviewSvg(doc: Document, d: Drawing): SVGSVGElement;    //
 export type PointerAction = 'draw' | 'ignore' | 'end';
 export function classifyPointer(e: { type: string; pointerType: string; buttons: number }): PointerAction;
 
+// src/editor/geometry.ts
+export function toCanvasPoint(
+  client: { x: number; y: number },
+  surfaceRect: { left: number; top: number },
+  scale: number,
+): { x: number; y: number };                                                    // canvas units (floats)
+
 // src/editor/save-queue.ts
-export interface SaveOutcome { kind: 'updated' | 'unchanged' | 'not-found' | 'duplicate' }
+export interface SaveOutcome { kind: 'updated' | 'unchanged' | 'not-found' | 'duplicate' | 'file-missing' }
 export class SaveQueue {
-  constructor(save: (line: string) => Promise<SaveOutcome>, opts: { debounceMs: number; timers?: Timers });
+  constructor(
+    save: (line: string) => Promise<SaveOutcome>,   // reads the session's current id at call time
+    opts: { debounceMs: number; onOutcome: (o: SaveOutcome) => void; timers?: Timers },
+  );                                     // onOutcome fires after EVERY save, debounced or flushed
   schedule(line: string): void;          // debounced
   flush(): Promise<SaveOutcome | null>;  // immediate; null if nothing pending
 }
@@ -99,5 +115,22 @@ Obsidian adapter (thin, tested with a fake vault):
 // src/obsidian/vault-save.ts
 export interface ProcessingVault { process(file: TFileLike, fn: (data: string) => string): Promise<string> }
 export function saveBlock(vault: ProcessingVault, file: TFileLike, id: string, line: string): Promise<SaveOutcome>;
+                                  // a process() rejection because the file is gone → 'file-missing' (never throws)
 export function appendNewBlock(vault: ProcessingVault, file: TFileLike, d: Drawing): Promise<void>;
+
+// src/obsidian/flows.ts  (the one tested Obsidian-facing flow; used by the insert command and preview taps)
+export interface OpenEditorDeps {
+  file: TFileLike;
+  id: string;
+  vault: ProcessingVault;
+  openViews(): { save(): Promise<void> }[];   // every open MarkdownView of `file`
+  read(file: TFileLike): Promise<string>;
+  isOverlayOpen(): boolean;
+  openOverlay(file: TFileLike, session: EditingSession, queue: SaveQueue): void;  // flow creates both
+  notice(message: string): void;
+}
+export function openEditorFlow(deps: OpenEditorDeps): Promise<void>;  // saves all views BEFORE reading
 ```
+
+Everything else in `src/obsidian/` and `src/main.ts` is glue (constitution v1.1.0): registration,
+DOM measurement and passing Obsidian objects into the functions above, with no branching of its own.

@@ -81,8 +81,9 @@ those changes.
    them.
 4. **Given** the user has lifted the Pencil after a change, **When** about half a second passes
    without further input, **Then** the change is saved to the note even if the user never taps Done.
-5. **Given** the editor is open, **When** the user leaves it by any route (Done, the platform's back
-   gesture, a keyboard Escape on desktop), **Then** all changes are saved.
+5. **Given** the editor is open, **When** the user taps Done, presses Escape on a keyboard, or leaves
+   the app (switches apps or locks the iPad), **Then** all changes are saved; leaving the app keeps
+   the editor open.
 
 ---
 
@@ -143,23 +144,24 @@ preview occupies the new proportions, and reopening the editor shows the same si
 
 ---
 
-### User Story 5 - Switch to the eraser with the Pencil (Priority: P5)
+### User Story 5 - Switch tools from the toolbar (Priority: P5)
 
-To erase quickly without reaching for the toolbar, the user double-taps the side of the Apple
-Pencil to toggle between pen and eraser, as in other iPad drawing apps.
+The user switches between pen and eraser with one tap on the toolbar, using either the Pencil or a
+finger, and can always see which tool is active. Apple Pencil double-tap would be the natural
+shortcut, but it is not available to plugins (research R1), so it is not part of v1.
 
 **Why this priority**: A convenience on top of the toolbar eraser button, which already delivers the
 function.
 
-**Independent Test**: In the editor with the pen active, perform the Pencil switch gesture; the
-eraser becomes active and the toolbar shows it. Repeat; the pen is active again.
+**Independent Test**: In the editor with the pen active, tap Eraser with the Pencil; the eraser
+becomes active and the toolbar shows it. Tap Pen with a finger; the pen is active again.
 
 **Acceptance Scenarios**:
 
-1. **Given** the pen is active, **When** the user performs the pen/eraser switch gesture, **Then**
+1. **Given** the pen is active, **When** the user taps the Eraser button (Pencil or finger), **Then**
    the eraser becomes active and the toolbar indicates it.
-2. **Given** the eraser is active, **When** the user performs the gesture again, **Then** the pen
-   becomes active.
+2. **Given** the eraser is active, **When** the user taps the Pen button, **Then** the pen becomes
+   active.
 3. **Given** Pencil double-tap cannot be detected on the user's device, **When** the user wants to
    switch tools, **Then** they tap the pen or eraser button in the toolbar (with a finger or the
    Pencil); no other gesture is added.
@@ -172,6 +174,9 @@ eraser becomes active and the toolbar shows it. Repeat; the pen is active again.
   small "tap to draw" placeholder, so the user can come back to it or delete it as ordinary text.
 - **Copied block**: the user copies a block and pastes it elsewhere, so two blocks share an
   identity. Saving must not guess which to update; the user is warned and the drawing is kept.
+- **Note renamed or deleted while editing**: a rename or move (e.g. arriving through sync) does not
+  interrupt saving. If the note is deleted, the user is told and can copy the drawing to paste
+  elsewhere.
 - **Many blocks**: a note with many drawings (e.g. 20) opens and scrolls without noticeable delay.
 - **Rotation / split view**: the device is rotated or Obsidian is resized while the editor is open;
   the editor stays usable and the drawing is not distorted or lost.
@@ -225,9 +230,9 @@ eraser becomes active and the toolbar shows it. Repeat; the pen is active again.
 - **FR-013**: The eraser MUST remove a whole stroke when the Pencil touches any part of it.
 - **FR-014**: Undo/redo MUST cover every change made during the current editing session (stroke
   added, stroke erased, canvas resized). History does not need to survive closing the editor.
-- **FR-015**: The editor MUST offer a quick pen/eraser toggle through the Apple Pencil's double-tap
-  gesture where the device makes it available; the active tool MUST always be visible in the
-  toolbar.
+- **FR-015**: The active tool MUST always be visible in the toolbar. Apple Pencil double-tap and
+  squeeze are not available to plugins (research R1), so v1 offers no Pencil gesture for switching
+  tools.
 - **FR-016**: Where Pencil double-tap is not available, the toolbar pen and eraser buttons MUST be
   the only way to switch tools; no fallback gesture is added. The buttons MUST respond to both
   finger and Pencil taps.
@@ -245,8 +250,9 @@ eraser becomes active and the toolbar shows it. Repeat; the pen is active again.
 
 **Saving and data safety**
 
-- **FR-021**: Changes MUST be saved when the editor is closed by any route, and automatically about
-  half a second after the Pencil is lifted.
+- **FR-021**: Changes MUST be saved when the editor is closed (Done, Escape, or the plugin being
+  disabled or updated), immediately when the user leaves the app, and automatically about half a
+  second after the Pencil is lifted.
 - **FR-022**: A save MUST find its block by identity in the note's current contents at the moment of
   saving, never by a remembered position.
 - **FR-023**: A save MUST change only the target block's data line; every other character of the
@@ -256,7 +262,8 @@ eraser becomes active and the toolbar shows it. Repeat; the pen is active again.
 - **FR-025**: If the target block cannot be found, or its identity appears more than once, the save
   MUST NOT modify the note; the user MUST be notified and offered a way to keep the drawing (append
   it to the note as a new block).
-- **FR-026**: A dense, full-width block of handwriting MUST add no more than about 30 KB to the note.
+- **FR-026**: A dense, full-width block of handwriting MUST add at most 30 KB (30,720 bytes) to the
+  note (measured by SC-004).
 - **FR-027**: Reopening and saving a drawing without changes MUST NOT alter the note.
 - **FR-028**: Drawings saved by any released version of the plugin MUST remain viewable and
   editable by later versions.
@@ -284,8 +291,9 @@ eraser becomes active and the toolbar shows it. Repeat; the pen is active again.
 ### Measurable Outcomes
 
 - **SC-001**: From running the insert command, the user can start writing within 1 second.
-- **SC-002**: Ink visibly follows the Pencil tip with no perceptible lag during normal handwriting,
-  judged on the user's iPad in the manual test checklist.
+- **SC-002**: Ink follows the Pencil tip without visible lag: during 10 seconds of continuous
+  handwriting on the user's iPad, handling each Pencil movement takes at most 4 ms in 95% of cases
+  and no frames are dropped, as measured with the device's web inspector timeline.
 - **SC-003**: In a scripted test of at least 20 cases where the note changes while a drawing is open
   (text added above/below, other blocks edited, block deleted, block duplicated), no typed text is
   ever lost and no drawing is ever lost or written to the wrong block.
@@ -298,7 +306,8 @@ eraser becomes active and the toolbar shows it. Repeat; the pen is active again.
   unintended strokes.
 - **SC-008**: A note containing 20 drawings displays all previews within 1 second of opening.
 - **SC-009**: The user can complete the full loop (insert, write, Done, reopen, erase a stroke,
-  Done) on the iPad on the first attempt without instructions.
+  Done) on the iPad on the first attempt without instructions, checked by running quickstart manual items
+  1, 5, 7 and 8 in one sitting.
 
 ## Assumptions
 

@@ -26,21 +26,24 @@ target ES2020
 
 **Storage**: The note's own Markdown file (fenced `ink` block); no other files, no settings in v1
 
-**Testing**: Vitest 5 (Node environment; `happy-dom` 20 for DOM-bound tests), fake `Vault` for
+**Testing**: Vitest 5 (Node environment; `happy-dom` 20 for DOM-bound tests). The `obsidian` npm
+package is types-only, so tested modules use `import type` only and runtime Obsidian classes appear
+only in glue (`main.ts`); fake `Vault` for
 integration tests, golden fixtures, manual iPad checklist in [quickstart.md](./quickstart.md)
 
 **Target Platform**: Obsidian ≥ 1.5.7 on iPadOS (primary, WebKit) and desktop (previews only)
 
 **Project Type**: Obsidian community plugin (single TypeScript project)
 
-**Performance Goals**: Ink follows the Pencil with no perceptible lag (one live-stroke repaint per
+**Performance Goals**: Ink follows the Pencil without visible lag: `pointermove` handler ≤ 4 ms at
+p95 and no dropped frames during 10 s of writing on the iPad (SC-002; one live-stroke repaint per
 pointer event); editor open ≤ 1 s; 20 previews rendered ≤ 1 s
 
 **Constraints**: Block data on one line; dense block ≤ 30 KB; no Node or Electron APIs; offline;
 per-canvas backing store ≤ 16,777,216 px with DPR ≤ 2; canvases freed on close
 
 **Scale/Scope**: One user, notes with up to ~20 drawings, drawings up to 4096 × 4096 units,
-~15 source modules
+~25 source files
 
 ## Constitution Check
 
@@ -48,7 +51,7 @@ per-canvas backing store ≤ 16,777,216 px with DPR ≤ 2; canvases freed on clo
 
 | Principle | Gate | Pre-research | Post-design |
 |-----------|------|--------------|-------------|
-| I. TDD | Every module has a test target; logic is separated from Obsidian/DOM glue; manual checklist exists for device-only behaviour | ✅ planned | ✅ [contracts/core-api.md](./contracts/core-api.md) lists every pure module; adapters take fakes; manual checklist in [quickstart.md](./quickstart.md) |
+| I. TDD | Every module has a test target; logic is separated from Obsidian/DOM glue; manual checklist exists for device-only behaviour | ✅ planned | ✅ [contracts/core-api.md](./contracts/core-api.md) lists every pure module; adapters take fakes; `openEditorFlow` (save views before reading) is tested; remaining thin glue is exempt under constitution v1.1.0; manual checklist in [quickstart.md](./quickstart.md) |
 | II. Inline, merge-friendly storage | One-line payload, version + id in header, RDP → delta → varint → deflate → base64, size bound tested, golden fixtures, round-trip tests | ✅ planned | ✅ [contracts/block-format.md](./contracts/block-format.md); R5, R6 |
 | III. Never lose user data | `vault.process` only; id lookup in fresh text; refuse on missing/duplicate; byte preservation tested; invalid blocks never rewritten | ✅ planned | ✅ R7, R8; `applyBlockUpdate` contract; SC-003 suite |
 | IV. iPad-first, mobile-safe | `isDesktopOnly:false`; SVG previews; overlay on `document.body`; bounded canvases freed on close; touch CSS + non-passive `touchstart`; pen-only input, hover ignored, coalesced events | ✅ planned | ✅ R10, R13, R14; [contracts/plugin-surface.md](./contracts/plugin-surface.md) |
@@ -100,6 +103,7 @@ src/
 │   └── canvas-size.ts     # default/min/clamp/fit
 ├── format/
 │   ├── varint.ts
+│   ├── errors.ts          # DecodeError (shared by codec and block-line)
 │   ├── codec.ts           # strokes <-> base64 payload
 │   ├── block-line.ts      # header grammar, DecodeError, newBlockMarkdown
 │   └── id.ts
@@ -112,12 +116,14 @@ src/
 │   └── svg-preview.ts     # preview <svg> builder
 ├── editor/
 │   ├── input-filter.ts    # classifyPointer
+│   ├── geometry.ts        # toCanvasPoint (client -> canvas units)
 │   ├── save-queue.ts      # debounce + serialised saves
 │   ├── session.ts         # EditingSession state (tool, drawing, history, dirty)
 │   ├── canvas-layers.ts   # bounded static/live canvases (DOM)
 │   └── overlay.ts         # overlay DOM, toolbar, resize handle, banner (DOM)
 └── obsidian/
     ├── vault-save.ts      # saveBlock / appendNewBlock over vault.process
+    ├── flows.ts           # openEditorFlow: save open views, then read/locate/parse/open (tested)
     ├── preview-processor.ts
     ├── insert-command.ts
     └── column-width.ts    # measure default width from the active view

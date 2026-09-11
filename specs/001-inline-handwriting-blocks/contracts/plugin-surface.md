@@ -39,9 +39,18 @@ Settings → Mobile → Toolbar.
 - Surface (`div.ink-surface`): two stacked canvases (static and live) plus `div.ink-resize-handle`
   at the bottom-right corner. The surface has `touch-action:none; -webkit-user-select:none;
   -webkit-touch-callout:none` and a non-passive `touchstart` listener calling `preventDefault()`.
-- Closing routes: Done button; Escape key; the platform back action. All flush the save queue.
+- Save and close routes (there is no system back gesture on iPad that reaches the overlay):
+
+  | Event | Action |
+  |-------|--------|
+  | Done button | flush, then close |
+  | Escape key (hardware keyboard) | flush, then close |
+  | `visibilitychange` → `hidden` (app switch, lock screen) | flush immediately, stay open |
+  | Plugin `onunload` (disabled or updated) | flush, then close |
 - Failure banner (`div.ink-banner`) when a save returns `not-found` or `duplicate`, with
   **Append to note** and **Close without saving** (the latter asks for confirmation).
+  When a save returns `file-missing`, the banner reads "This note no longer exists" and offers
+  **Copy drawing to clipboard** (a complete `ink` block with a fresh id) and **Close without saving**.
 - On close: canvases get `width = height = 0` and are removed; all listeners are released.
 
 ## Styles
