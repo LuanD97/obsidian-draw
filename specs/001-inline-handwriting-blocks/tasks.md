@@ -127,6 +127,10 @@ items 1–6).
 - [X] T059 [US1] Glue: wire `src/main.ts`: `registerMarkdownCodeBlockProcessor('ink', (src, el, ctx) => { ctx.addChild(new MarkdownRenderChild(el)); renderInkBlock(src, el, { sourcePath: ctx.sourcePath, openEditor }) })` (the only place a runtime `obsidian` class is used) and `addCommand` for `insert-block`; hold the open overlay reference (exposed to `openEditorFlow` as `isOverlayOpen`) and close it with `close({ reason: 'unload' })` in `onunload` (the overlay flushes before closing); registration only, no branching logic (depends on T055, T058)
 - [X] T060 [P] [US1] Write `styles.css` for `.ink-preview`, `.ink-preview.is-empty`, `.ink-preview-svg` (`color: var(--text-normal)`), `.ink-error`, `.ink-overlay`, `.ink-toolbar`, `.ink-surface`, button `is-active` state, using only Obsidian CSS variables (contracts/plugin-surface.md)
 - [ ] T061 [US1] Gate: `npm run typecheck && npm test && npm run build`; then `npm run deploy`, commit/push the vault, and run quickstart manual items 1–6 on the iPad (Safari Web Inspector attached). Record results; fix regressions test-first
+  - [X] typecheck, full test suite (158 tests), and production build all pass
+  - [X] `npm run deploy` succeeded: main.js/manifest.json/styles.css copied to `~/Documents/obsidian-personal/.obsidian/plugins/obsidian-draw/`
+  - [ ] commit/push the vault — left to the user (a separate git repo; not touched here)
+  - [ ] quickstart manual items 1–6 on the iPad — needs a physical device with Apple Pencil via Safari Web Inspector, not available to this agent
 
 **Checkpoint**: MVP usable on the iPad: insert, write, Done, inline preview.
 
