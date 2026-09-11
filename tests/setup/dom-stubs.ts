@@ -52,7 +52,10 @@ if (typeof window !== 'undefined') {
 		UIEvent: new (type: string, init?: UIEventInit) => UIEvent;
 	};
 
-	if (w.HTMLCanvasElement && !w.HTMLCanvasElement.prototype.getContext) {
+	if (w.HTMLCanvasElement) {
+		// happy-dom's own getContext('2d') returns null unless a native canvas
+		// adapter (e.g. node-canvas) is installed, so it is always replaced
+		// with a recording stub regardless of whether the method exists.
 		w.HTMLCanvasElement.prototype.getContext = function getContext(
 			this: HTMLCanvasElement,
 			kind: string,
