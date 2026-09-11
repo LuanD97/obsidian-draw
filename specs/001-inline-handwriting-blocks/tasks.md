@@ -89,8 +89,8 @@ items 1–6).
 
 ### Tests for User Story 1 (write first, confirm they fail) ⚠️
 
-- [ ] T027 [P] [US1] Red: tests for `simplify` in `tests/unit/model/simplify.test.ts`: collinear points collapse to their endpoints; a right-angle corner is kept; deviation ≤ ε = 0.5 is dropped and > 0.5 kept; kept points keep their pressure; inputs of 1 or 2 points are returned unchanged
-- [ ] T028 [P] [US1] Red: tests for `commitStroke` in `tests/unit/model/quantize.test.ts`: coordinates rounded to integers and clamped to `[0,width]×[0,height]`; pressure → `round(pressure × 255)` clamped to 0–255; consecutive duplicate points after rounding are removed but at least one point remains; the result is never re-simplified by later calls
+- [X] T027 [P] [US1] Red: tests for `simplify` in `tests/unit/model/simplify.test.ts`: collinear points collapse to their endpoints; a right-angle corner is kept; deviation ≤ ε = 0.5 is dropped and > 0.5 kept; kept points keep their pressure; inputs of 1 or 2 points are returned unchanged
+- [X] T028 [P] [US1] Red: tests for `commitStroke` in `tests/unit/model/quantize.test.ts`: coordinates rounded to integers and clamped to `[0,width]×[0,height]`; pressure → `round(pressure × 255)` clamped to 0–255; consecutive duplicate points after rounding are removed but at least one point remains; the result is never re-simplified by later calls
 - [ ] T029 [P] [US1] Red: tests for `defaultSize`, `contentWidth`, `fitScale` in `tests/unit/model/canvas-size.test.ts`: `defaultSize(null)` → 700×260; 150 → 200 wide; 3000 → 2000 wide; 812.7 → 812 wide; `contentWidth(clientWidth, padL, padR)` subtracts padding; `fitScale` returns 1 when the size fits and `min(availW/w, availH/h)` otherwise
 - [ ] T030 [P] [US1] Red: tests for `toCanvasPoint` in `tests/unit/editor/geometry.test.ts`: maps client coordinates through the surface rectangle and display scale into canvas units (scale 1 and scale 0.5), returning floats
 - [ ] T031 [P] [US1] Red: tests for `insertionText` in `tests/unit/document/insert.test.ts`: an empty current line → block markdown only; a non-empty line → a leading `\n` so the block starts on its own line; output always ends with a newline
@@ -107,8 +107,8 @@ items 1–6).
 
 ### Implementation for User Story 1
 
-- [ ] T042 [P] [US1] Green: implement `src/model/simplify.ts` (iterative RDP on x,y) to pass T027
-- [ ] T043 [US1] Green: implement `commitStroke` in `src/model/quantize.ts` (simplify ε 0.5 → round → clamp → dedupe) to pass T028 (depends on T042)
+- [X] T042 [P] [US1] Green: implement `src/model/simplify.ts` (iterative RDP on x,y) to pass T027
+- [X] T043 [US1] Green: implement `commitStroke` in `src/model/quantize.ts` (simplify ε 0.5 → round → clamp → dedupe) to pass T028 (depends on T042)
 - [ ] T044 [P] [US1] Green: implement `defaultSize`, `contentWidth`, `fitScale` in `src/model/canvas-size.ts` to pass T029
 - [ ] T045 [P] [US1] Green: implement `toCanvasPoint` in `src/editor/geometry.ts` to pass T030
 - [ ] T046 [P] [US1] Green: implement `insertionText` in `src/document/insert.ts` to pass T031
