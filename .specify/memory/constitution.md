@@ -1,22 +1,20 @@
 <!--
 Sync Impact Report
 ==================
-Version change: (unversioned template) → 1.0.0
-Bump rationale: Initial ratification of the constitution for a greenfield project.
+Version change: 1.0.0 → 1.1.0
+Bump rationale: MINOR — Principle I gains an explicit glue-code exemption (materially expanded
+guidance). No principle removed or redefined; the test-first rule for logic is unchanged.
 
-Modified principles (template placeholder → new title):
-  - [PRINCIPLE_1_NAME] → I. Test-Driven Development (NON-NEGOTIABLE)
-  - [PRINCIPLE_2_NAME] → II. Inline, Merge-Friendly Storage
-  - [PRINCIPLE_3_NAME] → III. Never Lose User Data
-  - [PRINCIPLE_4_NAME] → IV. iPad-First, Mobile-Safe
-  - [PRINCIPLE_5_NAME] → V. Lightweight and Simple
+Modified principles:
+  - I. Test-Driven Development (NON-NEGOTIABLE): added "Glue exemption" bullet. Thin glue with no
+    branching and no data-handling decisions is covered by the on-device checklist instead of
+    test-first. Anything deciding what is saved, where, or in which order stays test-first.
 
-Added sections:
-  - Technical Constraints (from [SECTION_2_NAME])
-  - Development Workflow & Quality Gates (from [SECTION_3_NAME])
-  - Governance (filled in)
-
+Added sections: none
 Removed sections: none
+
+Previous: 1.0.0 (2026-09-11) initial ratification — Principles I–V, Technical Constraints,
+Development Workflow & Quality Gates, Governance.
 
 Templates reviewed (not modified by this command; they read the constitution at runtime):
   - .specify/templates/plan-template.md ("Constitution Check" gate) — compatible
@@ -45,6 +43,11 @@ All production code is written test-first, following the Red → Green → Refac
   history, eraser hit-testing and input filtering (pen vs. touch vs. hover) are pure modules.
 - Obsidian APIs (`Plugin`, `Vault`, `MarkdownPostProcessorContext`, etc.) MUST be reached through
   thin adapters so tests can substitute fakes.
+- **Glue exemption**: thin glue code (registering commands, processors and events; reading DOM
+  measurements; passing Obsidian objects into tested functions) is exempt from test-first when it
+  contains no branching and no data-handling decisions. It MUST instead be covered by the manual
+  on-device checklist. Code that decides what data is written, where, or in which order is never
+  glue and MUST be developed test-first.
 - Behaviour that cannot be automated (real Apple Pencil input, iOS canvas memory, Scribble,
   Live Preview widget swapping) MUST be covered by a written manual test checklist in the
   feature's spec directory and executed on the iPad before the feature is considered done.
@@ -175,4 +178,4 @@ and memory footprint low on the iPad.
 - `CLAUDE.md` holds runtime development guidance and project context; it MUST stay consistent
   with this document.
 
-**Version**: 1.0.0 | **Ratified**: 2026-09-11 | **Last Amended**: 2026-09-11
+**Version**: 1.1.0 | **Ratified**: 2026-09-11 | **Last Amended**: 2026-09-12
