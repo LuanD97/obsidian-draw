@@ -30,14 +30,29 @@ function makeCanvas(doc: Document, size: Size, scale: number): HTMLCanvasElement
 export class CanvasLayers {
 	readonly static: HTMLCanvasElement;
 	readonly live: HTMLCanvasElement;
-	private readonly scale: number;
+	private scale: number;
+	private readonly dpr: number;
 
 	constructor(doc: Document, container: HTMLElement, size: Size, dpr: number) {
+		this.dpr = dpr;
 		this.scale = backingScale(size, dpr);
 		this.static = makeCanvas(doc, size, this.scale);
 		this.live = makeCanvas(doc, size, this.scale);
 		container.appendChild(this.static);
 		container.appendChild(this.live);
+	}
+
+	// Resizing a canvas's width/height always clears its pixels, same as a
+	// fresh canvas; the caller redraws from the (still intact) stroke model
+	// afterwards.
+	resize(size: Size): void {
+		this.scale = backingScale(size, this.dpr);
+		const w = Math.round(size.width * this.scale);
+		const h = Math.round(size.height * this.scale);
+		this.static.width = w;
+		this.static.height = h;
+		this.live.width = w;
+		this.live.height = h;
 	}
 
 	private context(canvas: HTMLCanvasElement): CanvasRenderingContext2D {

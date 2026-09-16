@@ -1,7 +1,7 @@
 import { CanvasLayers } from './canvas-layers';
 import { classifyPointer } from './input-filter';
 import { toCanvasPoint } from './geometry';
-import { fitScale } from '../model/canvas-size';
+import { fitScale, clampSize, resizeBounds } from '../model/canvas-size';
 import type { EditingSession } from './session';
 import type { SaveOutcome } from './save-queue';
 import type { RawPoint, Size, Stroke } from '../model/types';
@@ -23,7 +23,10 @@ export interface OpenOverlayDeps {
 	// an external wrapper around the returned handle is never actually run.
 	onClosed: () => void;
 	dpr: number;
-	available: Size;
+	// A function, not a value: re-read on every window 'resize' (rotation,
+	// split view) so the fit can be recomputed against the current viewport,
+	// not just the one at open time.
+	getAvailable: () => Size;
 }
 
 export interface CloseOptions {
@@ -33,6 +36,26 @@ export interface CloseOptions {
 export interface OverlayHandle {
 	element: HTMLElement;
 	close(opts?: CloseOptions): Promise<void>;
+}
+
+// Icon-only buttons, to leave more of the panel to the canvas: a simple,
+// hand-drawn 24x24 stroke icon per action, with an aria-label (and title,
+// for a mouse-hover tooltip) carrying the name no longer shown as text.
+const ICONS: Record<string, string> = {
+	pen: '<path d="M4 20l1-4L16 5l3 3L8 19l-4 1z"/><path d="M14 7l3 3"/>',
+	eraser:
+		'<path d="M18 13l-7 7H6l-3-3a2 2 0 0 1 0-3l10-10a2 2 0 0 1 3 0l4 4a2 2 0 0 1 0 3z"/><path d="M8 20h9"/>',
+	undo: '<path d="M4 10h10a5 5 0 0 1 0 10H9"/><path d="M4 10l5-5"/><path d="M4 10l5 5"/>',
+	redo: '<path d="M20 10H10a5 5 0 0 0 0 10h5"/><path d="M20 10l-5-5"/><path d="M20 10l-5 5"/>',
+	done: '<path d="M5 13l4 4L19 7"/>',
+};
+
+function iconButton(doc: Document, name: keyof typeof ICONS, label: string): HTMLButtonElement {
+	const button = doc.createElement('button');
+	button.setAttribute('aria-label', label);
+	button.title = label;
+	button.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name]}</svg>`;
+	return button;
 }
 
 function toPreviewStroke(raw: RawPoint[]): Stroke {
@@ -46,7 +69,7 @@ function toPreviewStroke(raw: RawPoint[]): Stroke {
 }
 
 export function openOverlay(deps: OpenOverlayDeps): OverlayHandle {
-	const { doc, parent, session, flush, getStrokeColor, onThemeChange, schedule, onClosed, dpr, available } =
+	const { doc, parent, session, flush, getStrokeColor, onThemeChange, schedule, onClosed, dpr, getAvailable } =
 		deps;
 
 	// overlay is a fixed, full-viewport scrim so it can stay attached to
@@ -65,30 +88,25 @@ export function openOverlay(deps: OpenOverlayDeps): OverlayHandle {
 	const toolbar = doc.createElement('div');
 	toolbar.className = 'ink-toolbar';
 
-	const penButton = doc.createElement('button');
+	const penButton = iconButton(doc, 'pen', 'Pen');
 	penButton.dataset.tool = 'pen';
 	penButton.classList.add('is-active');
-	penButton.textContent = 'Pen';
 	toolbar.appendChild(penButton);
 
-	const eraserButton = doc.createElement('button');
+	const eraserButton = iconButton(doc, 'eraser', 'Eraser');
 	eraserButton.dataset.tool = 'eraser';
-	eraserButton.textContent = 'Eraser';
 	toolbar.appendChild(eraserButton);
 
-	const undoButton = doc.createElement('button');
+	const undoButton = iconButton(doc, 'undo', 'Undo');
 	undoButton.dataset.action = 'undo';
-	undoButton.textContent = 'Undo';
 	toolbar.appendChild(undoButton);
 
-	const redoButton = doc.createElement('button');
+	const redoButton = iconButton(doc, 'redo', 'Redo');
 	redoButton.dataset.action = 'redo';
-	redoButton.textContent = 'Redo';
 	toolbar.appendChild(redoButton);
 
-	const doneButton = doc.createElement('button');
+	const doneButton = iconButton(doc, 'done', 'Done');
 	doneButton.dataset.action = 'done';
-	doneButton.textContent = 'Done';
 	toolbar.appendChild(doneButton);
 
 	panel.appendChild(toolbar);
@@ -122,10 +140,13 @@ export function openOverlay(deps: OpenOverlayDeps): OverlayHandle {
 	surface.className = 'ink-surface';
 	panel.appendChild(surface);
 
-	const size: Size = { width: session.drawing.width, height: session.drawing.height };
-	const scale = fitScale(size, available);
-	surface.style.width = `${size.width * scale}px`;
-	surface.style.height = `${size.height * scale}px`;
+	function currentSize(): Size {
+		return { width: session.drawing.width, height: session.drawing.height };
+	}
+
+	let scale = fitScale(currentSize(), getAvailable());
+	surface.style.width = `${currentSize().width * scale}px`;
+	surface.style.height = `${currentSize().height * scale}px`;
 	surface.style.position = 'relative';
 	surface.style.setProperty('touch-action', 'none');
 	// Applied last, and via the attribute rather than further style.*
@@ -137,7 +158,7 @@ export function openOverlay(deps: OpenOverlayDeps): OverlayHandle {
 		`${surface.getAttribute('style') ?? ''}-webkit-user-select: none; -webkit-touch-callout: none;`,
 	);
 
-	const layers = new CanvasLayers(doc, surface, size, dpr);
+	const layers = new CanvasLayers(doc, surface, currentSize(), dpr);
 	layers.static.classList.add('ink-static');
 	layers.live.classList.add('ink-live');
 
@@ -156,6 +177,21 @@ export function openOverlay(deps: OpenOverlayDeps): OverlayHandle {
 	function clearLive(): void {
 		const ctx = layers.live.getContext('2d');
 		ctx?.clearRect(0, 0, layers.live.width, layers.live.height);
+	}
+
+	// Re-fits the surface to the current drawing size (its own, after a
+	// resize commit/undo/redo, or the viewport's, after a window resize),
+	// resizes the canvas backing stores to match (which clears them) and
+	// redraws. Also run after every non-resize change (add/erase/undo/redo):
+	// the size is then unchanged, so this is a cheap no-op resize plus a
+	// redraw, avoiding a separate "did the size actually change" branch.
+	function applySurfaceSize(): void {
+		const size = currentSize();
+		scale = fitScale(size, getAvailable());
+		surface.style.width = `${size.width * scale}px`;
+		surface.style.height = `${size.height * scale}px`;
+		layers.resize(size);
+		redrawStatic();
 	}
 
 	let drawing = false;
@@ -216,12 +252,68 @@ export function openOverlay(deps: OpenOverlayDeps): OverlayHandle {
 	surface.addEventListener('pointerup', handlePointer);
 	surface.addEventListener('pointercancel', handlePointer);
 
+	// Outside the two canvases (a plain sibling div, not part of either
+	// backing store), positioned at the surface's bottom-right corner.
+	// Handles its own pointer events and stops them from reaching the
+	// surface's draw/erase handler above, so dragging it never starts a
+	// stroke. Accepts finger or pen (no classifyPointer filtering), unlike
+	// drawing, which is pen-only.
+	const resizeHandle = doc.createElement('div');
+	resizeHandle.className = 'ink-resize-handle';
+	surface.appendChild(resizeHandle);
+
+	let isResizing = false;
+	let resizeStartClient = { x: 0, y: 0 };
+	let resizeStartSize: Size = currentSize();
+	let resizeWant: Size = currentSize();
+
+	function handleResizePointer(e: PointerEvent): void {
+		e.stopPropagation();
+
+		if (e.type === 'pointerdown') {
+			e.preventDefault();
+			isResizing = true;
+			resizeStartClient = { x: e.clientX, y: e.clientY };
+			resizeStartSize = currentSize();
+			resizeWant = resizeStartSize;
+			return;
+		}
+		if (!isResizing) return;
+
+		if (e.type === 'pointermove') {
+			const dx = (e.clientX - resizeStartClient.x) / scale;
+			const dy = (e.clientY - resizeStartClient.y) / scale;
+			const bounds = resizeBounds(resizeStartSize, session.drawing.strokes, getAvailable());
+			resizeWant = clampSize(
+				{ width: resizeStartSize.width + dx, height: resizeStartSize.height + dy },
+				bounds.min,
+				bounds.max,
+			);
+			// Live preview only: stretches the existing canvas pixels to the
+			// dragged box. The canvases are properly resized and redrawn once
+			// the drag commits, in session.resize's onChange -> applySurfaceSize.
+			surface.style.width = `${resizeWant.width * scale}px`;
+			surface.style.height = `${resizeWant.height * scale}px`;
+			return;
+		}
+
+		// pointerup or pointercancel: commit once, on release.
+		isResizing = false;
+		const bounds = resizeBounds(resizeStartSize, session.drawing.strokes, getAvailable());
+		session.resize(resizeWant, bounds.max);
+	}
+
+	resizeHandle.addEventListener('pointerdown', handleResizePointer);
+	resizeHandle.addEventListener('pointermove', handleResizePointer);
+	resizeHandle.addEventListener('pointerup', handleResizePointer);
+	resizeHandle.addEventListener('pointercancel', handleResizePointer);
+
 	onThemeChange(() => {
 		redrawStatic();
 	});
 
 	session.onChange = () => {
-		redrawStatic();
+		applySurfaceSize();
 		updateHistoryButtons();
 		schedule(session.currentLine());
 	};
@@ -245,12 +337,20 @@ export function openOverlay(deps: OpenOverlayDeps): OverlayHandle {
 	}
 	doc.addEventListener('visibilitychange', onVisibilityChange);
 
+	// Rotation/split-view: re-fit against the current viewport without
+	// touching the stored drawing size.
+	function onWindowResize(): void {
+		applySurfaceSize();
+	}
+	window.addEventListener('resize', onWindowResize);
+
 	async function close(_opts: CloseOptions = {}): Promise<void> {
 		if (session.dirty) {
 			await flush();
 		}
 		doc.removeEventListener('keydown', onKeydown);
 		doc.removeEventListener('visibilitychange', onVisibilityChange);
+		window.removeEventListener('resize', onWindowResize);
 		layers.free();
 		overlay.remove();
 		onClosed();

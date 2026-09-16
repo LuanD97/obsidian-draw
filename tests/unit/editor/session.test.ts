@@ -156,3 +156,59 @@ describe('EditingSession (eraser, undo/redo, onChange)', () => {
 		expect(onChange).toHaveBeenCalledTimes(4);
 	});
 });
+
+describe('EditingSession (resize)', () => {
+	it('resize clamps the requested size with minSize(strokes) and the supplied max', () => {
+		const session = new EditingSession(freshDrawing());
+		session.addStroke([
+			{ x: 0, y: 0, pressure: 0.5 },
+			{ x: 500, y: 200, pressure: 0.5 },
+		]); // pushes minSize's floor up past 64x64
+
+		session.resize({ width: 10, height: 10 }, { width: 2000, height: 2000 });
+		expect(session.drawing.width).toBeGreaterThanOrEqual(500);
+		expect(session.drawing.height).toBeGreaterThanOrEqual(200);
+
+		session.resize({ width: 9999, height: 9999 }, { width: 2000, height: 2000 });
+		expect(session.drawing.width).toBe(2000);
+		expect(session.drawing.height).toBe(2000);
+	});
+
+	it('marks the session dirty and fires onChange once for a completed resize', () => {
+		const session = new EditingSession(freshDrawing());
+		session.markSaved(session.currentLine());
+		const onChange = vi.fn();
+		session.onChange = onChange;
+
+		session.resize({ width: 900, height: 400 }, { width: 2000, height: 2000 });
+
+		expect(session.dirty).toBe(true);
+		expect(onChange).toHaveBeenCalledTimes(1);
+		expect(session.drawing.width).toBe(900);
+		expect(session.drawing.height).toBe(400);
+	});
+
+	it('does nothing (no history entry, no onChange) when the clamped size equals the current one', () => {
+		const session = new EditingSession(freshDrawing());
+		const onChange = vi.fn();
+		session.onChange = onChange;
+
+		session.resize({ width: 700, height: 260 }, { width: 2000, height: 2000 });
+
+		expect(onChange).not.toHaveBeenCalled();
+		expect(session.canUndo()).toBe(false);
+	});
+
+	it('undo/redo restore the size through the same history as pen/eraser commands', () => {
+		const session = new EditingSession(freshDrawing());
+		session.resize({ width: 900, height: 400 }, { width: 2000, height: 2000 });
+
+		session.undo();
+		expect(session.drawing.width).toBe(700);
+		expect(session.drawing.height).toBe(260);
+
+		session.redo();
+		expect(session.drawing.width).toBe(900);
+		expect(session.drawing.height).toBe(400);
+	});
+});

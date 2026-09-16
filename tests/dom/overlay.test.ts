@@ -21,7 +21,7 @@ function makeDeps(overrides: Partial<Parameters<typeof openOverlay>[0]> = {}) {
 		schedule: vi.fn(),
 		onClosed: vi.fn(),
 		dpr: 2,
-		available: { width: 800, height: 600 },
+		getAvailable: vi.fn(() => ({ width: 800, height: 600 })),
 		...overrides,
 	};
 }
@@ -61,6 +61,25 @@ describe('openOverlay', () => {
 		expect(pen).not.toBeNull();
 		expect(done).not.toBeNull();
 		expect(pen?.classList.contains('is-active')).toBe(true);
+	});
+
+	// The buttons are icon-only (no visible text, to leave more room for the
+	// canvas), so an accessible name is the only thing that identifies them
+	// to assistive tech and to a mouse user hovering for a tooltip.
+	it('every toolbar button carries an aria-label naming its action', () => {
+		const overlay = openOverlay(makeDeps());
+		const expected: [string, string][] = [
+			['[data-tool="pen"]', 'Pen'],
+			['[data-tool="eraser"]', 'Eraser'],
+			['[data-action="undo"]', 'Undo'],
+			['[data-action="redo"]', 'Redo'],
+			['[data-action="done"]', 'Done'],
+		];
+		for (const [selector, label] of expected) {
+			const button = overlay.element.querySelector(selector);
+			expect(button?.getAttribute('aria-label')).toBe(label);
+			expect(button?.querySelector('svg')).not.toBeNull();
+		}
 	});
 
 	it('sets touch CSS on div.ink-surface', () => {
@@ -361,5 +380,70 @@ describe('openOverlay', () => {
 			configurable: true,
 			get: () => 'visible',
 		});
+	});
+
+	it('has a div.ink-resize-handle outside the canvases (a sibling within the surface)', () => {
+		const overlay = openOverlay(makeDeps());
+		const surface = overlay.element.querySelector('.ink-surface') as HTMLElement;
+		const handle = surface.querySelector('.ink-resize-handle');
+		expect(handle).not.toBeNull();
+		expect(handle?.tagName).not.toBe('CANVAS');
+	});
+
+	it('a pen pointerdown on the resize handle never starts a stroke', () => {
+		const session = new EditingSession(freshDrawing());
+		const overlay = openOverlay(makeDeps({ session }));
+		const handle = overlay.element.querySelector('.ink-resize-handle') as HTMLElement;
+
+		handle.dispatchEvent(
+			new PointerEvent('pointerdown', { pointerType: 'pen', buttons: 1, clientX: 0, clientY: 0 }),
+		);
+		handle.dispatchEvent(
+			new PointerEvent('pointermove', { pointerType: 'pen', buttons: 1, clientX: 50, clientY: 50 }),
+		);
+		handle.dispatchEvent(new PointerEvent('pointerup', { pointerType: 'pen', buttons: 0 }));
+
+		expect(session.drawing.strokes.length).toBe(0);
+	});
+
+	it('dragging the handle calls session.resize once, on release, clamped to the available bounds', () => {
+		const session = new EditingSession(freshDrawing());
+		const resizeSpy = vi.spyOn(session, 'resize');
+		const overlay = openOverlay(makeDeps({ session }));
+		const handle = overlay.element.querySelector('.ink-resize-handle') as HTMLElement;
+
+		handle.dispatchEvent(
+			new PointerEvent('pointerdown', { pointerType: 'pen', buttons: 1, clientX: 0, clientY: 0 }),
+		);
+		handle.dispatchEvent(
+			new PointerEvent('pointermove', { pointerType: 'pen', buttons: 1, clientX: 100, clientY: 50 }),
+		);
+		expect(resizeSpy).not.toHaveBeenCalled();
+
+		handle.dispatchEvent(new PointerEvent('pointerup', { pointerType: 'pen', buttons: 0 }));
+
+		expect(resizeSpy).toHaveBeenCalledTimes(1);
+		// 700+100 x 260+50, within the 800x600 available bound from makeDeps
+		expect(session.drawing.width).toBe(800);
+		expect(session.drawing.height).toBe(310);
+	});
+
+	it('a window resize event recomputes the fit scale without changing the drawing', () => {
+		const session = new EditingSession(freshDrawing());
+		let call = 0;
+		const getAvailable = vi.fn(() => {
+			call += 1;
+			return call === 1 ? { width: 800, height: 600 } : { width: 400, height: 300 };
+		});
+		const overlay = openOverlay(makeDeps({ session, getAvailable }));
+		const surface = overlay.element.querySelector('.ink-surface') as HTMLElement;
+
+		window.dispatchEvent(new Event('resize'));
+
+		expect(getAvailable.mock.calls.length).toBeGreaterThanOrEqual(2);
+		const expectedScale = Math.min(400 / 700, 300 / 260);
+		expect(surface.style.width).toBe(`${700 * expectedScale}px`);
+		expect(session.drawing.width).toBe(700);
+		expect(session.drawing.height).toBe(260);
 	});
 });

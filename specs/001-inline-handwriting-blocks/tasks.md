@@ -238,16 +238,23 @@ proportions and reopening shows the same size (quickstart items 10–11).
 
 ### Tests for User Story 4 (write first, confirm they fail) ⚠️
 
-- [ ] T084 [P] [US4] Red: extend `tests/unit/model/canvas-size.test.ts`: `minSize(strokes)` = max(64, bbox right + 4) × max(64, bbox bottom + 4), and 64×64 for no strokes; `clampSize(want, min, max)` clamps each dimension and caps at 4096, and when min > max the min wins; `resizeBounds(current, strokes, available)` returns `{ min: minSize(strokes), max: larger of current and available, capped at 4096 }`, so a 1100-wide canvas with 800 available keeps width 1100 when only its height is dragged
-- [ ] T085 [P] [US4] Red: extend `tests/unit/model/history.test.ts` and `tests/unit/editor/session.test.ts`: a `resize` command changes only width/height (strokes untouched), undo/redo restore sizes; `session.resize(size)` clamps with `minSize` and the supplied max, marks the session dirty and fires `onChange` once per completed drag
-- [ ] T086 [US4] Red: extend `tests/dom/overlay.test.ts`: `div.ink-resize-handle` exists outside the canvases; a pen `pointerdown` on the handle never starts a stroke; dragging the handle calls `session.resize` once on release; a window `resize` event recomputes the fit scale without changing the drawing
+- [X] T084 [P] [US4] Red: extend `tests/unit/model/canvas-size.test.ts`: `minSize(strokes)` = max(64, bbox right + 4) × max(64, bbox bottom + 4), and 64×64 for no strokes; `clampSize(want, min, max)` clamps each dimension and caps at 4096, and when min > max the min wins; `resizeBounds(current, strokes, available)` returns `{ min: minSize(strokes), max: larger of current and available, capped at 4096 }`, so a 1100-wide canvas with 800 available keeps width 1100 when only its height is dragged
+- [X] T085 [P] [US4] Red: extend `tests/unit/model/history.test.ts` and `tests/unit/editor/session.test.ts`: a `resize` command changes only width/height (strokes untouched), undo/redo restore sizes; `session.resize(size)` clamps with `minSize` and the supplied max, marks the session dirty and fires `onChange` once per completed drag
+- [X] T086 [US4] Red: extend `tests/dom/overlay.test.ts`: `div.ink-resize-handle` exists outside the canvases; a pen `pointerdown` on the handle never starts a stroke; dragging the handle calls `session.resize` once on release; a window `resize` event recomputes the fit scale without changing the drawing
 
 ### Implementation for User Story 4
 
-- [ ] T087 [P] [US4] Green: implement `minSize`, `clampSize` (min wins over max) and `resizeBounds` in `src/model/canvas-size.ts` to pass T084
-- [ ] T088 [US4] Green: add the `resize` command to `src/model/history.ts` and `resize()` to `src/editor/session.ts` to pass T085 (depends on T087)
-- [ ] T089 [US4] Green: add the resize handle (finger or pen drag, live outline while dragging, commit on release, bounds from `resizeBounds`: max = larger of the current size and the available area at scale 1, min wins) and the window/orientation refit to `src/editor/overlay.ts`; style `.ink-resize-handle` in `styles.css`; pass T086 (depends on T088)
+- [X] T087 [P] [US4] Green: implement `minSize`, `clampSize` (min wins over max) and `resizeBounds` in `src/model/canvas-size.ts` to pass T084
+- [X] T088 [US4] Green: add the `resize` command to `src/model/history.ts` and `resize()` to `src/editor/session.ts` to pass T085 (depends on T087)
+- [X] T089 [US4] Green: add the resize handle (finger or pen drag, live outline while dragging, commit on release, bounds from `resizeBounds`: max = larger of the current size and the available area at scale 1, min wins) and the window/orientation refit to `src/editor/overlay.ts`; style `.ink-resize-handle` in `styles.css`; pass T086 (depends on T088)
 - [ ] T090 [US4] Gate: typecheck, tests, build, deploy; run quickstart manual items 10–11 on the iPad
+  - [X] typecheck, full test suite (207 tests), and production build all pass
+  - [X] `npm run deploy` succeeded
+  - [X] also, by request: the toolbar is icon-only now (`aria-label`/`title` carry the name), to leave
+    more of the panel to the canvas — see the "Icon-only toolbar" note in plugin-surface.md
+  - [ ] commit/push the vault — left to the user
+  - [ ] quickstart manual items 10–11 on the iPad (resize, rotation) — needs a physical device, not
+    available to this agent
 
 **Checkpoint**: Canvas size is user-controlled and survives reopening and rotation.
 

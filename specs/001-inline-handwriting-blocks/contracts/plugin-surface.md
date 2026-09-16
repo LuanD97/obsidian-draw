@@ -42,7 +42,9 @@ Settings → Mobile → Toolbar.
   (dimmed) around it. The safety property that matters — staying outside the note's editable DOM —
   comes from being attached to `document.body`, not from covering the whole screen.
 - Toolbar (`div.ink-toolbar`): Pen, Eraser (with `is-active` on the active tool), Undo, Redo (with
-  `disabled` when unavailable), Done. Buttons accept finger and Pencil.
+  `disabled` when unavailable), Done. Buttons accept finger and Pencil. Icon-only (an inline `<svg>`,
+  no visible text) to leave more of the panel to the canvas; each carries an `aria-label` (and
+  `title`, for a mouse tooltip) naming the action.
 - Surface (`div.ink-surface`): two stacked canvases (static and live) plus `div.ink-resize-handle`
   at the bottom-right corner. The surface has `touch-action:none; -webkit-user-select:none;
   -webkit-touch-callout:none` and a non-passive `touchstart` listener calling `preventDefault()`.

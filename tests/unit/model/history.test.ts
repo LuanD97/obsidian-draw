@@ -83,4 +83,37 @@ describe('History', () => {
 		expect(result).toEqual(drawing);
 		expect(history.canUndo()).toBe(false);
 	});
+
+	describe('resize command', () => {
+		it('changes only width/height, leaving strokes untouched', () => {
+			const history = new History();
+			let drawing = freshDrawing([stroke(1), stroke(2)]);
+			drawing = history.apply(drawing, {
+				kind: 'resize',
+				from: { width: 700, height: 260 },
+				to: { width: 900, height: 400 },
+			});
+			expect(drawing).toEqual({ ...freshDrawing([stroke(1), stroke(2)]), width: 900, height: 400 });
+		});
+
+		it('undo restores the previous size, redo re-applies the new one', () => {
+			const history = new History();
+			let drawing = freshDrawing();
+			drawing = history.apply(drawing, {
+				kind: 'resize',
+				from: { width: 700, height: 260 },
+				to: { width: 900, height: 400 },
+			});
+			expect(drawing.width).toBe(900);
+			expect(drawing.height).toBe(400);
+
+			drawing = history.undo(drawing);
+			expect(drawing.width).toBe(700);
+			expect(drawing.height).toBe(260);
+
+			drawing = history.redo(drawing);
+			expect(drawing.width).toBe(900);
+			expect(drawing.height).toBe(400);
+		});
+	});
 });

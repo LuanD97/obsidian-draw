@@ -31,6 +31,24 @@ describe('CanvasLayers', () => {
 		expect(layers.live.height).toBe(Math.round(size.height * scale));
 	});
 
+	it('resize() recomputes backingScale for the new size and resizes both canvases', () => {
+		const container = document.createElement('div');
+		const dpr = 2;
+		const layers = new CanvasLayers(document, container, { width: 700, height: 260 }, dpr);
+
+		const newSize = { width: 4096, height: 4096 };
+		layers.resize(newSize);
+
+		const scale = backingScale(newSize, dpr);
+		expect(layers.static.width).toBe(Math.round(newSize.width * scale));
+		expect(layers.static.height).toBe(Math.round(newSize.height * scale));
+		expect(layers.live.width).toBe(Math.round(newSize.width * scale));
+		expect(layers.live.height).toBe(Math.round(newSize.height * scale));
+		// still attached, unlike free()
+		expect(container.contains(layers.static)).toBe(true);
+		expect(container.contains(layers.live)).toBe(true);
+	});
+
 	it('free() sets both canvases width/height to 0 and detaches them', () => {
 		const container = document.createElement('div');
 		const layers = new CanvasLayers(document, container, { width: 700, height: 260 }, 2);

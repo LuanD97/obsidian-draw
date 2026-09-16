@@ -2,7 +2,8 @@ import { commitStroke } from '../model/quantize';
 import { formatBlockLine } from '../format/block-line';
 import { hitStrokes, ERASER_RADIUS } from '../model/erase';
 import { History } from '../model/history';
-import type { Drawing, RawPoint, Stroke } from '../model/types';
+import { clampSize, minSize } from '../model/canvas-size';
+import type { Drawing, RawPoint, Size, Stroke } from '../model/types';
 import type { SaveOutcome } from './save-queue';
 
 export type Tool = 'pen' | 'eraser';
@@ -82,6 +83,18 @@ export class EditingSession {
 
 	canRedo(): boolean {
 		return this.history.canRedo();
+	}
+
+	// Commits one completed drag: the overlay shows a live preview of the
+	// dragged size itself and calls this once, on release, with the final
+	// wanted size and the max bound for that drag (its min always comes from
+	// the current strokes, so a resize can never cut one off).
+	resize(want: Size, max: Size): void {
+		const clamped = clampSize(want, minSize(this.drawing.strokes), max);
+		if (clamped.width === this.drawing.width && clamped.height === this.drawing.height) return;
+		const from: Size = { width: this.drawing.width, height: this.drawing.height };
+		this.drawing = this.history.apply(this.drawing, { kind: 'resize', from, to: clamped });
+		this.onChange?.();
 	}
 
 	// Save-state transitions (orphaned banner, "Append to note", etc.) land in
