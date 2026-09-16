@@ -146,21 +146,40 @@ The preview and the stored line reflect exactly that (quickstart items 7–9).
 
 ### Tests for User Story 2 (write first, confirm they fail) ⚠️
 
-- [ ] T062 [P] [US2] Red: tests for `hitStrokes` in `tests/unit/model/erase.test.ts`: a point within `radius + strokeHalfWidth` of a segment hits; a point just outside misses; a single-point (dot) stroke can be hit; a stroke whose bounding box is far away is rejected without segment checks (spy or counter); returns indices in ascending order
-- [ ] T063 [P] [US2] Red: tests for `History` in `tests/unit/model/history.test.ts`: `add` undo/redo; `erase` of several strokes re-inserts each at its original index on undo and removes them again on redo; a new command clears redo; `canUndo`/`canRedo` flags; undo on empty history is a no-op
-- [ ] T064 [US2] Red: extend `tests/unit/editor/session.test.ts`: `setTool('eraser')`; `beginErase()` + several `eraseAt(p)` + `endErase()` records one `erase` command containing every stroke removed during that contact; `undo()`/`redo()` update the drawing; undoing back to the last saved line makes the session clean again; `onChange` fires after each pen-up, erase contact, undo and redo
-- [ ] T065 [US2] Red: extend `tests/dom/overlay.test.ts`: toolbar also has Eraser, Undo, Redo; Undo/Redo carry `disabled` when unavailable; tapping Eraser moves `is-active` to it; an `Escape` keydown closes via `flush`; a `visibilitychange` with `document.visibilityState === 'hidden'` calls `flush` and the overlay stays open; `close({ reason: 'unload' })` flushes before removing the overlay; a session change calls the injected `schedule(line)` (autosave)
-- [ ] T066 [US2] Red: extend `tests/dom/preview-processor.test.ts`: `pointerdown` and `mousedown` on `div.ink-preview` are `defaultPrevented` and do not propagate to a parent listener; `click` calls the injected `openEditor(sourcePath, id)`; `div.ink-error` is not clickable
+- [X] T062 [P] [US2] Red: tests for `hitStrokes` in `tests/unit/model/erase.test.ts`: a point within `radius + strokeHalfWidth` of a segment hits; a point just outside misses; a single-point (dot) stroke can be hit; a stroke whose bounding box is far away is rejected without segment checks (spy or counter); returns indices in ascending order
+- [X] T063 [P] [US2] Red: tests for `History` in `tests/unit/model/history.test.ts`: `add` undo/redo; `erase` of several strokes re-inserts each at its original index on undo and removes them again on redo; a new command clears redo; `canUndo`/`canRedo` flags; undo on empty history is a no-op
+- [X] T064 [US2] Red: extend `tests/unit/editor/session.test.ts`: `setTool('eraser')`; `beginErase()` + several `eraseAt(p)` + `endErase()` records one `erase` command containing every stroke removed during that contact; `undo()`/`redo()` update the drawing; undoing back to the last saved line makes the session clean again; `onChange` fires after each pen-up, erase contact, undo and redo
+- [X] T065 [US2] Red: extend `tests/dom/overlay.test.ts`: toolbar also has Eraser, Undo, Redo; Undo/Redo carry `disabled` when unavailable; tapping Eraser moves `is-active` to it; an `Escape` keydown closes via `flush`; a `visibilitychange` with `document.visibilityState === 'hidden'` calls `flush` and the overlay stays open; `close({ reason: 'unload' })` flushes before removing the overlay; a session change calls the injected `schedule(line)` (autosave)
+- [X] T066 [US2] Red: extend `tests/dom/preview-processor.test.ts`: `pointerdown` and `mousedown` on `div.ink-preview` are `defaultPrevented` and do not propagate to a parent listener; `click` calls the injected `openEditor(sourcePath, id)`; `div.ink-error` is not clickable
 
 ### Implementation for User Story 2
 
-- [ ] T067 [P] [US2] Green: implement `hitStrokes` in `src/model/erase.ts` (eraser radius 8 units, bbox reject, point-to-segment distance) to pass T062
-- [ ] T068 [P] [US2] Green: implement `History` in `src/model/history.ts` to pass T063
-- [ ] T069 [US2] Green: extend `src/editor/session.ts` with tools, erase contacts, undo/redo and `onChange` to pass T064 (depends on T067, T068)
-- [ ] T070 [US2] Green: extend `src/editor/overlay.ts` to pass T065: Eraser/Undo/Redo buttons and states; eraser loop (pen contact → `beginErase`/`eraseAt`/`endErase`, then `redrawStatic`); session `onChange` → `schedule(currentLine())`; Escape closes through `flush`; `visibilitychange` → hidden flushes without closing; an unload close flushes first (routes per contracts/plugin-surface.md) (depends on T069)
-- [ ] T071 [US2] Green: extend `src/obsidian/preview-processor.ts` with the press suppression and click → `openEditor` behaviour to pass T066
-- [ ] T072 [US2] Glue: wire preview taps in `src/main.ts`: `openEditor(sourcePath, id)` resolves the file with `app.vault.getFileByPath` and calls `openEditorFlow` (T057) with the real vault and every open `MarkdownView` of that file as `openViews` (research R8); no branching of its own (depends on T057, T070, T071)
+- [X] T067 [P] [US2] Green: implement `hitStrokes` in `src/model/erase.ts` (eraser radius 8 units, bbox reject, point-to-segment distance) to pass T062
+- [X] T068 [P] [US2] Green: implement `History` in `src/model/history.ts` to pass T063
+- [X] T069 [US2] Green: extend `src/editor/session.ts` with tools, erase contacts, undo/redo and `onChange` to pass T064 (depends on T067, T068)
+- [X] T070 [US2] Green: extend `src/editor/overlay.ts` to pass T065: Eraser/Undo/Redo buttons and states; eraser loop (pen contact → `beginErase`/`eraseAt`/`endErase`, then `redrawStatic`); session `onChange` → `schedule(currentLine())`; Escape closes through `flush`; `visibilitychange` → hidden flushes without closing; an unload close flushes first (routes per contracts/plugin-surface.md) (depends on T069)
+- [X] T071 [US2] Green: extend `src/obsidian/preview-processor.ts` with the press suppression and click → `openEditor` behaviour to pass T066
+- [X] T072 [US2] Glue: wire preview taps in `src/main.ts`: `openEditor(sourcePath, id)` resolves the file with `app.vault.getFileByPath` and calls `openEditorFlow` (T057) with the real vault and every open `MarkdownView` of that file as `openViews` (research R8); no branching of its own (depends on T057, T070, T071)
 - [ ] T073 [US2] Gate: typecheck, tests, build, deploy; run quickstart manual items 7–9 on the iPad (Live Preview and Reading view, cursor never enters the block, erase/undo/redo, autosave after app switch)
+  - [X] typecheck, full test suite (191 tests), and production build all pass
+  - [X] `npm run deploy` succeeded: main.js/manifest.json/styles.css copied to `~/Documents/obsidian-personal/.obsidian/plugins/obsidian-draw/`
+  - [X] first on-device pass (items 7–8) found 4 bugs, all fixed test-first and re-deployed: (1) a stale
+    "overlay is open" flag stuck taps to reopen a drawing until the app was restarted — main.ts was
+    resetting it by wrapping the returned `close()`, but the toolbar's own Done/Escape handlers call
+    their closure-captured `close` directly, never that wrapper; fixed by adding an `onClosed` hook
+    `openOverlay` calls itself on every close path; (2) tapping a finished preview did nothing at all —
+    `preventDefault()` on a cancelable `pointerdown` for `pointerType` pen/touch suppresses the
+    browser's synthetic `click` per the Pointer Events spec, so the tap-to-edit listener (on `click`)
+    never fired on real hardware; switched it to `pointerup`, which always fires; (3) the drawable
+    surface had no background of its own in dark themes, reading as one flat black rectangle
+    indistinguishable from the full-screen overlay behind it; gave `.ink-surface` a background, border
+    and shadow; (4) `simplify()`'s RDP only measured positional deviation, so a stroke's pen-down/up
+    taper (position barely moves, pressure ramps hard) always collapsed to 1–2 points regardless of
+    epsilon, producing blank/gappy patches on the re-rendered stroke; added a pressure-deviation term
+    so a point that diverges from the interpolated pressure survives even when nearly collinear
+  - [ ] commit/push the vault — left to the user (a separate git repo; not touched here)
+  - [ ] re-run quickstart manual items 7–9 on the iPad to confirm the fixes — needs a physical device
+    with Apple Pencil via Safari Web Inspector, not available to this agent
 
 **Checkpoint**: Drawings can be reopened and corrected; autosave works.
 

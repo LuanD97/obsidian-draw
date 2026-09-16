@@ -1,6 +1,7 @@
-import { MarkdownRenderChild, Notice, Plugin, TFile } from 'obsidian';
+import { MarkdownRenderChild, MarkdownView, Notice, Plugin, TFile } from 'obsidian';
 import { renderInkBlock } from './obsidian/preview-processor';
 import { createInsertCommand } from './obsidian/insert-command';
+import { openEditorFlow } from './obsidian/flows';
 import { openOverlay, type OverlayHandle } from './editor/overlay';
 import type { EditingSession } from './editor/session';
 import type { SaveQueue } from './editor/save-queue';
@@ -17,9 +18,7 @@ export default class DrawPlugin extends Plugin {
 			ctx.addChild(new MarkdownRenderChild(el));
 			renderInkBlock(source, el, {
 				sourcePath: ctx.sourcePath,
-				// Wired to real behaviour by User Story 2 (T072): tapping a
-				// preview isn't clickable yet, so this is unreachable in v1's MVP.
-				openEditor: () => {},
+				openEditor: (sourcePath, id) => this.openEditor(sourcePath, id),
 			});
 		});
 
@@ -37,7 +36,30 @@ export default class DrawPlugin extends Plugin {
 	}
 
 	onunload(): void {
-		void this.overlayHandle?.close();
+		void this.overlayHandle?.close({ reason: 'unload' });
+	}
+
+	private openEditor(sourcePath: string, id: string): void {
+		const file = this.app.vault.getFileByPath(sourcePath);
+		if (!file) return;
+
+		const openViews = this.app.workspace
+			.getLeavesOfType('markdown')
+			.map((leaf) => leaf.view as MarkdownView)
+			.filter((view) => view.file?.path === file.path);
+
+		void openEditorFlow({
+			file: file as TFileLike,
+			id,
+			vault: this.app.vault,
+			openViews: () => openViews,
+			read: (f) => this.app.vault.read(f as TFile),
+			isOverlayOpen: () => this.overlayHandle !== null,
+			openOverlay: (f, session, queue) => this.showOverlay(f, session, queue),
+			notice: (message) => {
+				new Notice(message);
+			},
+		});
 	}
 
 	private showOverlay(_file: TFileLike, session: EditingSession, queue: SaveQueue): void {
@@ -51,15 +73,13 @@ export default class DrawPlugin extends Plugin {
 			onThemeChange: (handler) => {
 				this.registerEvent(this.app.workspace.on('css-change', handler));
 			},
+			schedule: (line) => queue.schedule(line),
+			onClosed: () => {
+				this.overlayHandle = null;
+			},
 			dpr: window.devicePixelRatio,
 			available: { width: window.innerWidth, height: window.innerHeight },
 		});
-
-		const close = handle.close.bind(handle);
-		handle.close = async () => {
-			await close();
-			this.overlayHandle = null;
-		};
 
 		this.overlayHandle = handle;
 	}

@@ -38,5 +38,21 @@ export function renderInkBlock(source: string, el: HTMLElement, options: RenderI
 		preview.appendChild(buildPreviewSvg(doc, drawing));
 	}
 
+	const suppressPress = (e: Event): void => {
+		e.preventDefault();
+		e.stopPropagation();
+	};
+	preview.addEventListener('pointerdown', suppressPress);
+	preview.addEventListener('mousedown', suppressPress);
+	// Not 'click': calling preventDefault() on a cancelable pointerdown for
+	// pointerType 'pen'/'touch' (done above, to stop the tap moving
+	// CodeMirror's cursor into the block) tells the browser to skip the
+	// compatibility mousedown/mouseup/click it would otherwise synthesize,
+	// so a real Pencil or finger tap would never reach a 'click' listener.
+	// pointerup is a genuine pointer event and always fires.
+	preview.addEventListener('pointerup', () => {
+		options.openEditor(options.sourcePath, drawing.id);
+	});
+
 	el.appendChild(preview);
 }

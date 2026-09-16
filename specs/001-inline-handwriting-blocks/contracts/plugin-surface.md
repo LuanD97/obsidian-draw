@@ -17,8 +17,11 @@
     (`viewBox="0 0 W H"`, `width:100%`, `max-width:Wpx`, paths with `fill="currentColor"`).
   - Valid, empty drawing → `div.ink-preview.is-empty` with the text "Tap to draw", sized W × H scaled.
   - Invalid → `div.ink-error` with the message from the block-format error table. Not tappable.
-- Interaction: `pointerdown`/`mousedown` are prevented and stopped on `div.ink-preview`; `click` opens
-  the editor overlay for `(ctx.sourcePath, id)`.
+- Interaction: `pointerdown`/`mousedown` are prevented and stopped on `div.ink-preview` (so the tap
+  can't move CodeMirror's cursor into the block); `pointerup` opens the editor overlay for
+  `(ctx.sourcePath, id)`. Not `click`: per the Pointer Events spec, `preventDefault()` on a
+  cancelable `pointerdown` for `pointerType` `pen`/`touch` suppresses the browser's compatibility
+  `mousedown`/`mouseup`/`click`, so a real Pencil or finger tap never produces a `click` here.
 - Works in Live Preview and Reading view. No canvas is ever created by the processor.
 
 ## Command

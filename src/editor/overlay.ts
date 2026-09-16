@@ -13,13 +13,26 @@ export interface OpenOverlayDeps {
 	flush: () => Promise<SaveOutcome | null>;
 	getStrokeColor: () => string;
 	onThemeChange: (handler: () => void) => void;
+	schedule: (line: string) => void;
+	// Called on every path that actually closes the overlay (Done, Escape, a
+	// direct close() call), never on a visibilitychange flush. This is the
+	// one place "the overlay is closed" gets decided, so callers that track
+	// an "is open" flag (main.ts) must react to this instead of wrapping the
+	// returned close() themselves: the toolbar's own button handlers call
+	// their closure-captured close directly, not a re-assigned property, so
+	// an external wrapper around the returned handle is never actually run.
+	onClosed: () => void;
 	dpr: number;
 	available: Size;
 }
 
+export interface CloseOptions {
+	reason?: 'unload' | 'done';
+}
+
 export interface OverlayHandle {
 	element: HTMLElement;
-	close(): Promise<void>;
+	close(opts?: CloseOptions): Promise<void>;
 }
 
 function toPreviewStroke(raw: RawPoint[]): Stroke {
@@ -33,7 +46,8 @@ function toPreviewStroke(raw: RawPoint[]): Stroke {
 }
 
 export function openOverlay(deps: OpenOverlayDeps): OverlayHandle {
-	const { doc, parent, session, flush, getStrokeColor, onThemeChange, dpr, available } = deps;
+	const { doc, parent, session, flush, getStrokeColor, onThemeChange, schedule, onClosed, dpr, available } =
+		deps;
 
 	const overlay = doc.createElement('div');
 	overlay.className = 'ink-overlay';
@@ -47,12 +61,52 @@ export function openOverlay(deps: OpenOverlayDeps): OverlayHandle {
 	penButton.textContent = 'Pen';
 	toolbar.appendChild(penButton);
 
+	const eraserButton = doc.createElement('button');
+	eraserButton.dataset.tool = 'eraser';
+	eraserButton.textContent = 'Eraser';
+	toolbar.appendChild(eraserButton);
+
+	const undoButton = doc.createElement('button');
+	undoButton.dataset.action = 'undo';
+	undoButton.textContent = 'Undo';
+	toolbar.appendChild(undoButton);
+
+	const redoButton = doc.createElement('button');
+	redoButton.dataset.action = 'redo';
+	redoButton.textContent = 'Redo';
+	toolbar.appendChild(redoButton);
+
 	const doneButton = doc.createElement('button');
 	doneButton.dataset.action = 'done';
 	doneButton.textContent = 'Done';
 	toolbar.appendChild(doneButton);
 
 	overlay.appendChild(toolbar);
+
+	function setActiveTool(tool: 'pen' | 'eraser'): void {
+		penButton.classList.toggle('is-active', tool === 'pen');
+		eraserButton.classList.toggle('is-active', tool === 'eraser');
+	}
+
+	function updateHistoryButtons(): void {
+		undoButton.disabled = !session.canUndo();
+		redoButton.disabled = !session.canRedo();
+	}
+
+	penButton.addEventListener('click', () => {
+		session.setTool('pen');
+		setActiveTool('pen');
+	});
+	eraserButton.addEventListener('click', () => {
+		session.setTool('eraser');
+		setActiveTool('eraser');
+	});
+	undoButton.addEventListener('click', () => {
+		session.undo();
+	});
+	redoButton.addEventListener('click', () => {
+		session.redo();
+	});
 
 	const surface = doc.createElement('div');
 	surface.className = 'ink-surface';
@@ -107,9 +161,12 @@ export function openOverlay(deps: OpenOverlayDeps): OverlayHandle {
 		if (action === 'ignore') return;
 
 		if (action === 'end') {
-			if (drawing && currentRaw.length > 0) {
-				session.addStroke(currentRaw);
-				redrawStatic();
+			if (drawing) {
+				if (session.tool === 'eraser') {
+					session.endErase();
+				} else if (currentRaw.length > 0) {
+					session.addStroke(currentRaw);
+				}
 			}
 			drawing = false;
 			currentRaw = [];
@@ -117,6 +174,7 @@ export function openOverlay(deps: OpenOverlayDeps): OverlayHandle {
 			return;
 		}
 
+		const isContactStart = !drawing;
 		drawing = true;
 		// getCoalescedEvents() only ever returns entries for genuinely
 		// hardware-coalesced pointermove events; it is an empty array for
@@ -127,6 +185,15 @@ export function openOverlay(deps: OpenOverlayDeps): OverlayHandle {
 			typeof e.getCoalescedEvents === 'function' ? e.getCoalescedEvents() : [];
 		const events: PointerEvent[] = coalesced.length > 0 ? coalesced : [e];
 		const rect = surfaceRect();
+
+		if (session.tool === 'eraser') {
+			if (isContactStart) session.beginErase();
+			for (const ev of events) {
+				session.eraseAt(toCanvasPoint({ x: ev.clientX, y: ev.clientY }, rect, scale));
+			}
+			return;
+		}
+
 		for (const ev of events) {
 			const canvasPt = toCanvasPoint({ x: ev.clientX, y: ev.clientY }, rect, scale);
 			currentRaw.push({ x: canvasPt.x, y: canvasPt.y, pressure: ev.pressure });
@@ -143,20 +210,44 @@ export function openOverlay(deps: OpenOverlayDeps): OverlayHandle {
 		redrawStatic();
 	});
 
+	session.onChange = () => {
+		redrawStatic();
+		updateHistoryButtons();
+		schedule(session.currentLine());
+	};
+
 	redrawStatic();
+	updateHistoryButtons();
 
 	parent.appendChild(overlay);
 
-	async function close(): Promise<void> {
+	function onKeydown(e: KeyboardEvent): void {
+		if (e.key === 'Escape') {
+			void close();
+		}
+	}
+	doc.addEventListener('keydown', onKeydown);
+
+	function onVisibilityChange(): void {
+		if (doc.visibilityState === 'hidden') {
+			void flush();
+		}
+	}
+	doc.addEventListener('visibilitychange', onVisibilityChange);
+
+	async function close(_opts: CloseOptions = {}): Promise<void> {
 		if (session.dirty) {
 			await flush();
 		}
+		doc.removeEventListener('keydown', onKeydown);
+		doc.removeEventListener('visibilitychange', onVisibilityChange);
 		layers.free();
 		overlay.remove();
+		onClosed();
 	}
 
 	doneButton.addEventListener('click', () => {
-		void close();
+		void close({ reason: 'done' });
 	});
 
 	return { element: overlay, close };

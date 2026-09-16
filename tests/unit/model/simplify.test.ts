@@ -48,4 +48,29 @@ describe('simplify (Ramer-Douglas-Peucker)', () => {
 		const points = [pt(0, 0), pt(10, 10)];
 		expect(simplify(points, 0.5)).toEqual(points);
 	});
+
+	// Regression: a stroke's pen-down/pen-up taper barely moves in x,y while
+	// pressure ramps sharply, so a purely positional RDP always collapses it
+	// (near-zero spatial deviation, however small epsilon is), discarding
+	// the pressure ramp that made it a taper. On re-render this showed up as
+	// blank/gappy patches at stroke ends instead of a smooth fade.
+	it('keeps a point whose pressure diverges from the endpoints even when nearly collinear', () => {
+		const points = [
+			pt(0, 0, 0.05),
+			pt(2, 0, 0.05),
+			pt(4, 0, 0.05),
+			pt(5, 0, 0.9),
+			pt(6, 0, 0.05),
+			pt(8, 0, 0.05),
+			pt(10, 0, 0.05),
+		];
+		const result = simplify(points, 0.5);
+		expect(result.some((p) => p.pressure === 0.9)).toBe(true);
+	});
+
+	it('still collapses collinear points when pressure also varies linearly between the endpoints', () => {
+		const points = [pt(0, 0, 0.1), pt(5, 0, 0.5), pt(10, 0, 0.9)];
+		const result = simplify(points, 0.5);
+		expect(result).toEqual([pt(0, 0, 0.1), pt(10, 0, 0.9)]);
+	});
 });

@@ -77,6 +77,15 @@
 	touch-action: none;
 	-webkit-user-select: none;
 	-webkit-touch-callout: none;
+	/* The overlay behind it is var(--background-primary) too, and the
+	   canvases are transparent apart from the strokes, so without a
+	   contrasting background of its own the drawable area is invisible
+	   against the surrounding chrome (most noticeable in dark themes,
+	   where both read as flat black). */
+	background: var(--background-secondary);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-m, 6px);
+	box-shadow: var(--shadow-s, 0 1px 4px rgba(0, 0, 0, 0.2));
 }
 
 .ink-surface canvas {

@@ -18,6 +18,8 @@ function makeDeps(overrides: Partial<Parameters<typeof openOverlay>[0]> = {}) {
 		flush: vi.fn(async (): Promise<SaveOutcome | null> => ({ kind: 'updated' })),
 		getStrokeColor: vi.fn(() => '#111111'),
 		onThemeChange: vi.fn(),
+		schedule: vi.fn(),
+		onClosed: vi.fn(),
 		dpr: 2,
 		available: { width: 800, height: 600 },
 		...overrides,
@@ -151,5 +153,196 @@ describe('openOverlay', () => {
 
 		const ctx = staticCanvas.getContext('2d') as unknown as { fillStyle: string };
 		expect(ctx.fillStyle).toBe('#eeeeee');
+	});
+
+	it('has a toolbar with Eraser, Undo and Redo', () => {
+		const overlay = openOverlay(makeDeps());
+		const toolbar = overlay.element.querySelector('.ink-toolbar');
+		expect(toolbar?.querySelector('[data-tool="eraser"]')).not.toBeNull();
+		expect(toolbar?.querySelector('[data-action="undo"]')).not.toBeNull();
+		expect(toolbar?.querySelector('[data-action="redo"]')).not.toBeNull();
+	});
+
+	it('Undo/Redo carry disabled when unavailable, and enable once history exists', () => {
+		const session = new EditingSession(freshDrawing());
+		const overlay = openOverlay(makeDeps({ session }));
+		const undo = overlay.element.querySelector('[data-action="undo"]') as HTMLButtonElement;
+		const redo = overlay.element.querySelector('[data-action="redo"]') as HTMLButtonElement;
+		expect(undo.disabled).toBe(true);
+		expect(redo.disabled).toBe(true);
+
+		session.addStroke([
+			{ x: 0, y: 0, pressure: 0.5 },
+			{ x: 10, y: 10, pressure: 0.5 },
+		]);
+		expect(undo.disabled).toBe(false);
+		expect(redo.disabled).toBe(true);
+
+		undo.click();
+		expect(undo.disabled).toBe(true);
+		expect(redo.disabled).toBe(false);
+	});
+
+	it('tapping Eraser moves is-active to it', () => {
+		const overlay = openOverlay(makeDeps());
+		const pen = overlay.element.querySelector('[data-tool="pen"]') as HTMLElement;
+		const eraser = overlay.element.querySelector('[data-tool="eraser"]') as HTMLElement;
+		expect(pen.classList.contains('is-active')).toBe(true);
+		expect(eraser.classList.contains('is-active')).toBe(false);
+
+		eraser.click();
+		expect(eraser.classList.contains('is-active')).toBe(true);
+		expect(pen.classList.contains('is-active')).toBe(false);
+	});
+
+	it('erasing with the pen removes a hit stroke and redraws', () => {
+		const session = new EditingSession(freshDrawing());
+		session.addStroke([
+			{ x: 0, y: 0, pressure: 0.5 },
+			{ x: 10, y: 0, pressure: 0.5 },
+		]);
+		const deps = makeDeps({ session });
+		const overlay = openOverlay(deps);
+		const eraser = overlay.element.querySelector('[data-tool="eraser"]') as HTMLElement;
+		eraser.click();
+
+		const surface = overlay.element.querySelector('.ink-surface') as HTMLElement;
+		const down = new PointerEvent('pointerdown', {
+			pointerType: 'pen',
+			buttons: 1,
+			clientX: 5,
+			clientY: 0,
+		});
+		surface.dispatchEvent(down);
+		const up = new PointerEvent('pointerup', { pointerType: 'pen', buttons: 0 });
+		surface.dispatchEvent(up);
+
+		expect(session.drawing.strokes.length).toBe(0);
+	});
+
+	it('an Escape keydown closes via flush', async () => {
+		const session = new EditingSession(freshDrawing());
+		session.addStroke([
+			{ x: 0, y: 0, pressure: 0.5 },
+			{ x: 10, y: 10, pressure: 0.5 },
+		]);
+		const deps = makeDeps({ session });
+		const overlay = openOverlay(deps);
+
+		document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+		await Promise.resolve();
+		await Promise.resolve();
+
+		expect(deps.flush).toHaveBeenCalledTimes(1);
+		expect(document.body.contains(overlay.element)).toBe(false);
+	});
+
+	it('a visibilitychange to hidden flushes but leaves the overlay open', async () => {
+		const session = new EditingSession(freshDrawing());
+		session.addStroke([
+			{ x: 0, y: 0, pressure: 0.5 },
+			{ x: 10, y: 10, pressure: 0.5 },
+		]);
+		const deps = makeDeps({ session });
+		const overlay = openOverlay(deps);
+
+		Object.defineProperty(document, 'visibilityState', {
+			configurable: true,
+			get: () => 'hidden',
+		});
+		document.dispatchEvent(new Event('visibilitychange'));
+		await Promise.resolve();
+		await Promise.resolve();
+
+		expect(deps.flush).toHaveBeenCalledTimes(1);
+		expect(document.body.contains(overlay.element)).toBe(true);
+
+		Object.defineProperty(document, 'visibilityState', {
+			configurable: true,
+			get: () => 'visible',
+		});
+	});
+
+	it("close({ reason: 'unload' }) flushes before removing the overlay", async () => {
+		const session = new EditingSession(freshDrawing());
+		session.addStroke([
+			{ x: 0, y: 0, pressure: 0.5 },
+			{ x: 10, y: 10, pressure: 0.5 },
+		]);
+		const deps = makeDeps({ session });
+		const overlay = openOverlay(deps);
+
+		await overlay.close({ reason: 'unload' });
+
+		expect(deps.flush).toHaveBeenCalledTimes(1);
+		expect(document.body.contains(overlay.element)).toBe(false);
+	});
+
+	it('a session change calls the injected schedule(line)', () => {
+		const session = new EditingSession(freshDrawing());
+		const deps = makeDeps({ session });
+		const overlay = openOverlay(deps);
+		const surface = overlay.element.querySelector('.ink-surface') as HTMLElement;
+
+		const down = new PointerEvent('pointerdown', {
+			pointerType: 'pen',
+			buttons: 1,
+			clientX: 5,
+			clientY: 5,
+		});
+		surface.dispatchEvent(down);
+		const up = new PointerEvent('pointerup', { pointerType: 'pen', buttons: 0 });
+		surface.dispatchEvent(up);
+
+		expect(deps.schedule).toHaveBeenCalledWith(session.currentLine());
+	});
+
+	// Regression: main.ts used to track "is the overlay open" by wrapping
+	// handle.close from the outside, but the toolbar's own Done/Escape
+	// handlers call the closure they captured internally, not that wrapped
+	// property — so the external reset never ran and every later tap to
+	// reopen silently no-opped until the app was restarted. openOverlay must
+	// call the one injected onClosed hook itself, on every path that closes.
+	it('calls the injected onClosed exactly once when Done closes the overlay', async () => {
+		const onClosed = vi.fn();
+		const deps = makeDeps({ onClosed });
+		const overlay = openOverlay(deps);
+		const done = overlay.element.querySelector('[data-action="done"]') as HTMLElement;
+		done.click();
+		await Promise.resolve();
+		await Promise.resolve();
+
+		expect(onClosed).toHaveBeenCalledTimes(1);
+	});
+
+	it('calls the injected onClosed when the returned close() is invoked directly (the onunload path)', async () => {
+		const onClosed = vi.fn();
+		const deps = makeDeps({ onClosed });
+		const overlay = openOverlay(deps);
+
+		await overlay.close({ reason: 'unload' });
+
+		expect(onClosed).toHaveBeenCalledTimes(1);
+	});
+
+	it('does not call onClosed on a visibilitychange flush, since the overlay stays open', async () => {
+		const onClosed = vi.fn();
+		const deps = makeDeps({ onClosed });
+		openOverlay(deps);
+
+		Object.defineProperty(document, 'visibilityState', {
+			configurable: true,
+			get: () => 'hidden',
+		});
+		document.dispatchEvent(new Event('visibilitychange'));
+		await Promise.resolve();
+		await Promise.resolve();
+
+		expect(onClosed).not.toHaveBeenCalled();
+
+		Object.defineProperty(document, 'visibilityState', {
+			configurable: true,
+			get: () => 'visible',
+		});
 	});
 });
