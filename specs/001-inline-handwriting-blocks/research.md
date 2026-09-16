@@ -57,34 +57,41 @@ else was considered. There are no open NEEDS CLARIFICATION items.
 ## R5. Stroke encoding (FR-026, SC-004)
 
 - **Decision**:
-  1. At stroke commit, simplify with Ramer–Douglas–Peucker on (x, y), ε = 0.5 canvas units; keep the
-     pressure of retained points.
-  2. Quantise x, y to integer canvas units (1 unit = 1 CSS px at the block's stored size); pressure
-     to an integer 0–255.
-  3. Binary layout: `uvarint strokeCount`, then per stroke `uvarint pointCount`, first point as
+  1. At stroke commit, quantise x, y to integer canvas units (1 unit = 1 CSS px at the block's
+     stored size) and pressure to an integer 0–255; drop a point only if it is an exact
+     `(x, y, pressure)` duplicate of the point before it (a genuinely redundant sample landing on
+     the same rounded pixel at the same pressure). No geometric simplification runs.
+  2. Binary layout: `uvarint strokeCount`, then per stroke `uvarint pointCount`, first point as
      zigzag-varint x, y and uvarint p, following points as zigzag-varint deltas (dx, dy, dp).
-  4. Compress with fflate `deflateSync` (raw DEFLATE, level 9), then standard base64 (RFC 4648 with
+  3. Compress with fflate `deflateSync` (raw DEFLATE, level 9), then standard base64 (RFC 4648 with
      padding). An empty drawing has an empty payload.
-- **Rationale**: This is the pipeline agreed in CLAUDE.md. Estimate for a dense full-width block:
-  ~200 strokes × ~40 retained points × ~3 bytes ≈ 24 KB raw → ~15 KB deflated → ~20 KB base64,
-  inside the 30 KB budget. Handwriting deltas are small, so most values fit in one varint byte.
-  Integer units are visually indistinguishable after perfect-freehand smoothing at normal writing
-  sizes.
-- **Alternatives considered**: Half-unit quantisation (finer, ~10% larger); kept as a fallback if the
-  on-device visual check shows jaggedness, which would still be decided before v1 is released and the
-  format frozen. gzip/zlib containers (a few bytes of extra header, no benefit). base64url (no real
-  benefit inside a code block; standard base64 works with `atob`/`btoa` everywhere).
+- **Rationale**: v1 originally simplified with Ramer–Douglas–Peucker (ε = 0.5 canvas units) before
+  quantising, per CLAUDE.md's encoding pipeline. On-device testing (User Story 2) showed this
+  producing visible blank/gappy patches in the re-rendered stroke: RDP measures only positional
+  deviation, so a pen-down/pen-up taper (position barely moves while pressure ramps hard) always
+  collapsed to 1–2 points regardless of epsilon, discarding most of the pressure signal perfect-freehand
+  needs for a smooth taper. Measured against the seeded dense-handwriting fixture
+  (`tests/fixtures/handwriting.ts`, 700×260, 6 rows × 14 glyphs ≈ 84 strokes), quantising without any
+  geometric simplification came to 12.8 KB — comfortably inside the 30 KB budget (SC-004) with no need
+  to trade fidelity for size. `simplify.ts` (the RDP module) was removed rather than kept unused.
+- **Alternatives considered**: A pressure-aware RDP variant (also normalise a pressure-deviation term
+  into the keep/drop decision) fixed the worst case but a duplicate-position point with a different
+  pressure was still silently dropped by the quantiser's position-only dedupe run afterwards, and the
+  measured size headroom made the extra complexity unnecessary. Half-unit quantisation (finer, ~10%
+  larger): unneeded once simplification was dropped, since fidelity is no longer the bottleneck. gzip/
+  zlib containers (a few bytes of extra header, no benefit). base64url (no real benefit inside a code
+  block; standard base64 works with `atob`/`btoa` everywhere).
 
 ## R6. Determinism and "no change means no write" (FR-027)
 
-- **Decision**: Simplification and quantisation happen once, when a stroke is committed. The model
-  only ever holds quantised strokes, and the encoder is a pure serialisation of them, so
+- **Decision**: Quantisation happens once, when a stroke is committed. The model only ever holds
+  quantised strokes, and the encoder is a pure serialisation of them, so
   `encode(decode(line)) === line` for every line the plugin produced. The editing session tracks a
   dirty flag; closing a clean session does not call the save path at all.
-- **Rationale**: Re-running RDP on already-simplified points could drop more points on every save,
-  making the stored data drift. Serialising only what is stored avoids that, and the dirty flag
-  guarantees an untouched note even if a future compressor version were not byte-stable.
-- **Alternatives considered**: Keep full-precision points during the session and simplify on save
+- **Rationale**: Committing a stroke exactly once and never reprocessing already-quantised points
+  avoids the stored data drifting across saves, and the dirty flag guarantees an untouched note even
+  if a future compressor version were not byte-stable.
+- **Alternatives considered**: Keep full-precision points during the session and quantise on save
   (what you see would differ slightly from what reopens).
 
 ## R7. Locating and updating a block in the note (FR-022, FR-023, FR-025)

@@ -108,7 +108,14 @@ items 1–6).
 ### Implementation for User Story 1
 
 - [X] T042 [P] [US1] Green: implement `src/model/simplify.ts` (iterative RDP on x,y) to pass T027
+  - Superseded during US2 (T073 gate fixes, see research.md R5): on-device testing showed RDP
+    collapsing pen-down/pen-up tapers to 1–2 points regardless of epsilon, discarding the pressure
+    signal and leaving blank/gappy patches on re-render. Measured well inside the size budget without
+    it, so `simplify.ts` and its test (T027) were deleted rather than kept unused; `commitStroke` no
+    longer calls it. T042/T027 are left checked as a historical record of work done, not current state.
 - [X] T043 [US1] Green: implement `commitStroke` in `src/model/quantize.ts` (simplify ε 0.5 → round → clamp → dedupe) to pass T028 (depends on T042)
+  - Updated in US2: no longer simplifies; rounds, clamps and drops a point only on an exact
+    `(x, y, pressure)` duplicate (see T042's note above).
 - [X] T044 [P] [US1] Green: implement `defaultSize`, `contentWidth`, `fitScale` in `src/model/canvas-size.ts` to pass T029
 - [X] T045 [P] [US1] Green: implement `toCanvasPoint` in `src/editor/geometry.ts` to pass T030
 - [X] T046 [P] [US1] Green: implement `insertionText` in `src/document/insert.ts` to pass T031
@@ -161,7 +168,7 @@ The preview and the stored line reflect exactly that (quickstart items 7–9).
 - [X] T071 [US2] Green: extend `src/obsidian/preview-processor.ts` with the press suppression and click → `openEditor` behaviour to pass T066
 - [X] T072 [US2] Glue: wire preview taps in `src/main.ts`: `openEditor(sourcePath, id)` resolves the file with `app.vault.getFileByPath` and calls `openEditorFlow` (T057) with the real vault and every open `MarkdownView` of that file as `openViews` (research R8); no branching of its own (depends on T057, T070, T071)
 - [ ] T073 [US2] Gate: typecheck, tests, build, deploy; run quickstart manual items 7–9 on the iPad (Live Preview and Reading view, cursor never enters the block, erase/undo/redo, autosave after app switch)
-  - [X] typecheck, full test suite (191 tests), and production build all pass
+  - [X] typecheck, full test suite (185 tests), and production build all pass
   - [X] `npm run deploy` succeeded: main.js/manifest.json/styles.css copied to `~/Documents/obsidian-personal/.obsidian/plugins/obsidian-draw/`
   - [X] first on-device pass (items 7–8) found 4 bugs, all fixed test-first and re-deployed: (1) a stale
     "overlay is open" flag stuck taps to reopen a drawing until the app was restarted — main.ts was
@@ -177,6 +184,14 @@ The preview and the stored line reflect exactly that (quickstart items 7–9).
     taper (position barely moves, pressure ramps hard) always collapsed to 1–2 points regardless of
     epsilon, producing blank/gappy patches on the re-rendered stroke; added a pressure-deviation term
     so a point that diverges from the interpolated pressure survives even when nearly collinear
+  - [X] second on-device pass: still gappy after (4), so simplification was dropped entirely rather
+    than tuned further — measured 12.8KB for a dense 700×260 block with no geometric simplification at
+    all (well inside the 30KB budget), so `commitStroke` now only rounds/clamps/drops exact
+    `(x,y,pressure)` duplicates; `simplify.ts` and its tests were deleted as dead code (see research.md
+    R5). Also switched the editor from a full-screen overlay to a card (`div.ink-panel`) sized to the
+    drawing over a dim scrim (`div.ink-overlay`), per user request: the safety property that matters is
+    staying outside the note's editable DOM (still true, still attached to `document.body`), not
+    covering the whole screen — spec.md FR-009 and the acceptance scenarios were amended to match.
   - [ ] commit/push the vault — left to the user (a separate git repo; not touched here)
   - [ ] re-run quickstart manual items 7–9 on the iPad to confirm the fixes — needs a physical device
     with Apple Pencil via Safari Web Inspector, not available to this agent

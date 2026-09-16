@@ -35,8 +35,12 @@ Settings → Mobile → Toolbar.
 
 ## Editor overlay
 
-- Attached to `document.body` as `div.ink-overlay` (fixed, inset 0, above Obsidian's UI). Never
-  inside the note's editor.
+- Attached to `document.body` as `div.ink-overlay` (fixed, inset 0, above Obsidian's UI, a dim
+  scrim behind the panel). Never inside the note's editor. `div.ink-panel`, a child of the overlay,
+  is the visible card holding the toolbar and surface; it sizes to fit them (roughly the drawing's
+  own size plus chrome) rather than filling the screen, so the rest of the note stays visible
+  (dimmed) around it. The safety property that matters — staying outside the note's editable DOM —
+  comes from being attached to `document.body`, not from covering the whole screen.
 - Toolbar (`div.ink-toolbar`): Pen, Eraser (with `is-active` on the active tool), Undo, Redo (with
   `disabled` when unavailable), Done. Buttons accept finger and Pencil.
 - Surface (`div.ink-surface`): two stacked canvases (static and live) plus `div.ink-resize-handle`

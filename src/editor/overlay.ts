@@ -49,8 +49,18 @@ export function openOverlay(deps: OpenOverlayDeps): OverlayHandle {
 	const { doc, parent, session, flush, getStrokeColor, onThemeChange, schedule, onClosed, dpr, available } =
 		deps;
 
+	// overlay is a fixed, full-viewport scrim so it can stay attached to
+	// document.body and center its content - that's what keeps it outside
+	// the note's editable DOM (the actual safety property from research R13/
+	// CLAUDE.md's iPad pitfalls). panel is the visible card, sized to its
+	// content (roughly the drawing plus chrome) rather than the viewport, so
+	// the rest of the note stays visible around it.
 	const overlay = doc.createElement('div');
 	overlay.className = 'ink-overlay';
+
+	const panel = doc.createElement('div');
+	panel.className = 'ink-panel';
+	overlay.appendChild(panel);
 
 	const toolbar = doc.createElement('div');
 	toolbar.className = 'ink-toolbar';
@@ -81,7 +91,7 @@ export function openOverlay(deps: OpenOverlayDeps): OverlayHandle {
 	doneButton.textContent = 'Done';
 	toolbar.appendChild(doneButton);
 
-	overlay.appendChild(toolbar);
+	panel.appendChild(toolbar);
 
 	function setActiveTool(tool: 'pen' | 'eraser'): void {
 		penButton.classList.toggle('is-active', tool === 'pen');
@@ -110,7 +120,7 @@ export function openOverlay(deps: OpenOverlayDeps): OverlayHandle {
 
 	const surface = doc.createElement('div');
 	surface.className = 'ink-surface';
-	overlay.appendChild(surface);
+	panel.appendChild(surface);
 
 	const size: Size = { width: session.drawing.width, height: session.drawing.height };
 	const scale = fitScale(size, available);

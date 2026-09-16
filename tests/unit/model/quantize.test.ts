@@ -60,4 +60,37 @@ describe('commitStroke', () => {
 		const stroke = commitStroke(raw, 700, 260);
 		expect(stroke.points.length).toBe(3);
 	});
+
+	// Regression: commitStroke used to run the points through RDP geometric
+	// simplification before quantizing, which always collapses a nearly
+	// stationary run (a pen-down/pen-up taper: position barely moves while
+	// pressure ramps) to 1-2 points, regardless of epsilon - discarding most
+	// of the pressure signal and producing blank/gappy patches on
+	// re-render. Strokes are now quantized as captured (round + clamp + drop
+	// only exact duplicates); a dense block still stays well inside the 30KB
+	// budget (tests/integration/roundtrip-size.test.ts), so there is no
+	// reason to trade fidelity for it.
+	it('keeps every distinct raw sample (no geometric simplification), even along a perfectly straight run', () => {
+		// Perfectly collinear and each one unit apart, so every sample rounds
+		// to its own distinct integer point. RDP would have collapsed this
+		// whole run to just the two endpoints (deviation 0 <= any epsilon).
+		const raw: RawPoint[] = [];
+		for (let i = 0; i <= 40; i++) {
+			raw.push({ x: i, y: 0, pressure: 0.5 });
+		}
+		const stroke = commitStroke(raw, 700, 260);
+		expect(stroke.points.length).toBe(raw.length);
+	});
+
+	it('keeps a duplicate-position point when its pressure differs (a taper), instead of dropping it', () => {
+		const raw: RawPoint[] = [
+			{ x: 10, y: 10, pressure: 0.05 },
+			{ x: 10.2, y: 10.1, pressure: 0.9 }, // rounds to the same (10,10) but a very different pressure
+			{ x: 50, y: 50, pressure: 0.5 },
+		];
+		const stroke = commitStroke(raw, 700, 260);
+		const pressures = stroke.points.map((p) => p.p);
+		expect(pressures).toContain(13); // round(0.05*255)
+		expect(pressures).toContain(230); // round(0.9*255)
+	});
 });

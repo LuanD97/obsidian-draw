@@ -78,7 +78,11 @@ export default class DrawPlugin extends Plugin {
 				this.overlayHandle = null;
 			},
 			dpr: window.devicePixelRatio,
-			available: { width: window.innerWidth, height: window.innerHeight },
+			// Leaves room for the panel's own padding/border and the toolbar
+			// above the surface, and keeps some scrim visible around the
+			// panel even for a drawing that would otherwise fit the viewport
+			// exactly, matching .ink-panel's max-width/max-height clamp.
+			available: { width: window.innerWidth * 0.9, height: window.innerHeight * 0.75 },
 		});
 
 		this.overlayHandle = handle;

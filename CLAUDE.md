@@ -46,20 +46,30 @@ v1;id=k3f9x2ab;700x260;<base64 of compressed, delta-encoded strokes>
   it again after the file has changed underneath. The v1 format is final and specified in
   `specs/001-inline-handwriting-blocks/contracts/block-format.md`; it is frozen once released.
 - Encoding pipeline:
-  1. Simplify each stroke with Ramer–Douglas–Peucker.
-  2. Round coordinates to integers and delta-encode them, keeping pressure.
+  1. Round each stroke's coordinates to integers and pressure to 0–255, dropping a point only if
+     it's an exact duplicate of the one before it. No geometric simplification (e.g. RDP): it was
+     tried and dropped after User Story 2 on-device testing showed it collapsing a pen-down/pen-up
+     taper to 1–2 points regardless of epsilon, discarding the pressure ramp and leaving blank/gappy
+     patches on re-render — see `specs/001-inline-handwriting-blocks/research.md` R5. A dense block
+     stays well inside the size budget without it.
+  2. Delta-encode the (now quantised) coordinates, keeping pressure.
   3. Pack as varints, compress (e.g. `fflate`), then base64.
 - Target size: roughly 5–30KB for a dense block. Anything like tldraw-sized JSON is too big.
 
-### Rendering and editing: static inline preview, tap to edit in a full-screen overlay
+### Rendering and editing: static inline preview, tap to edit in a panel outside the note
 
 - **Inline:** `registerMarkdownCodeBlockProcessor('ink', ...)` renders a lightweight
   **static SVG** preview. This works in Live Preview and Reading view, and it's harmless
   if CodeMirror re-renders or virtualises the block.
-- **Editing:** tapping the preview opens a **full-screen overlay attached to
-  `document.body`**, outside the editor, containing the canvas, pen, eraser, undo/redo
-  and a Done button. This avoids the iPad failure modes listed below. Inline editing
-  inside the note is a possible later improvement, not v1.
+- **Editing:** tapping the preview opens a card (`div.ink-panel`, sized to the drawing,
+  not the screen) over a dim scrim (`div.ink-overlay`, fixed and attached to
+  **`document.body`**), containing the canvas, pen, eraser, undo/redo and a Done button.
+  The card and scrim are outside the note's editable DOM — never inside the
+  contenteditable editor — which is what avoids the iPad failure modes listed below;
+  that safety property is about staying outside the editable DOM, not about covering
+  the whole screen, so the rest of the note stays visible (dimmed) around the card.
+  Inline editing inside the note itself (typing/drawing directly in the note's own
+  flow, no separate surface at all) is a possible later improvement, not v1.
 - **Stroke rendering:** use `perfect-freehand` (pressure-sensitive outlines). Do **not**
   use tldraw; it's too heavy for this job.
 - **Saving:**

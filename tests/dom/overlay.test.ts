@@ -35,6 +35,23 @@ describe('openOverlay', () => {
 		expect(overlay.element.parentElement).toBe(document.body);
 	});
 
+	// The overlay is a fixed, full-viewport scrim only so it can stay
+	// attached to document.body and center its content - that's what keeps
+	// it outside the note's editable DOM (the actual safety property). The
+	// toolbar and surface live inside a div.ink-panel that's sized to its
+	// content, not the overlay, so the panel itself is not full-screen and
+	// the rest of the note stays visible around it.
+	it('wraps the toolbar and surface in a div.ink-panel, not directly in the full-viewport overlay', () => {
+		const overlay = openOverlay(makeDeps());
+		const panel = overlay.element.querySelector('.ink-panel');
+		expect(panel).not.toBeNull();
+		expect(panel?.querySelector('.ink-toolbar')).not.toBeNull();
+		expect(panel?.querySelector('.ink-surface')).not.toBeNull();
+		// direct children of the overlay: only the panel, nothing full-bleed
+		expect(overlay.element.children).toHaveLength(1);
+		expect(overlay.element.children[0]).toBe(panel);
+	});
+
 	it('has a toolbar with Pen (is-active) and Done', () => {
 		const overlay = openOverlay(makeDeps());
 		const toolbar = overlay.element.querySelector('.ink-toolbar');

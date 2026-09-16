@@ -31,12 +31,29 @@
 }
 
 .ink-overlay {
+	/* A dim scrim, not an opaque full-screen background: it only needs to
+	   stay attached to document.body (outside the note's editable DOM) and
+	   center the panel. The note stays visible, dimmed, around the panel. */
 	position: fixed;
 	inset: 0;
 	z-index: var(--layer-modal, 60);
 	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 16px;
+	background: rgba(0, 0, 0, 0.4);
+}
+
+.ink-panel {
+	display: flex;
 	flex-direction: column;
+	max-width: 96vw;
+	max-height: 96vh;
 	background: var(--background-primary);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-l, 10px);
+	box-shadow: var(--shadow-l, 0 8px 24px rgba(0, 0, 0, 0.35));
+	overflow: hidden;
 }
 
 .ink-toolbar {
@@ -77,15 +94,14 @@
 	touch-action: none;
 	-webkit-user-select: none;
 	-webkit-touch-callout: none;
-	/* The overlay behind it is var(--background-primary) too, and the
-	   canvases are transparent apart from the strokes, so without a
-	   contrasting background of its own the drawable area is invisible
-	   against the surrounding chrome (most noticeable in dark themes,
-	   where both read as flat black). */
+	/* The panel behind it is var(--background-primary) too, and the canvases
+	   are transparent apart from the strokes, so without a contrasting
+	   background of its own the drawable area is invisible against the
+	   surrounding chrome (most noticeable in dark themes, where both read as
+	   flat black). */
 	background: var(--background-secondary);
 	border: 1px solid var(--background-modifier-border);
 	border-radius: var(--radius-m, 6px);
-	box-shadow: var(--shadow-s, 0 1px 4px rgba(0, 0, 0, 0.2));
 }
 
 .ink-surface canvas {

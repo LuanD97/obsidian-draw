@@ -26,8 +26,10 @@ fingers never draw."
 ### User Story 1 - Write a new handwriting block in a note (Priority: P1)
 
 While typing a note on the iPad, the user wants to jot something by hand. They run "Insert
-handwriting block" (from the command palette or the mobile toolbar). A full-screen drawing surface
-opens immediately. They write with the Apple Pencil, tap Done, and are back in the note, where the
+handwriting block" (from the command palette or the mobile toolbar). A drawing surface opens
+immediately, as a panel over the note (not covering the whole screen, and outside the note's text
+editing area so it can't interfere with it). They write with the Apple Pencil, tap Done, and are
+back in the note, where the
 handwriting now appears inline between the surrounding text. The drawing is stored inside the note
 itself, so there is no separate drawing file.
 
@@ -41,8 +43,8 @@ handwriting block and no new files exist in the vault.
 **Acceptance Scenarios**:
 
 1. **Given** a note open in the editor with the cursor on a line, **When** the user runs "Insert
-   handwriting block", **Then** an empty block is inserted at the cursor position and the
-   full-screen editor opens with an empty canvas as wide as the note's text column.
+   handwriting block", **Then** an empty block is inserted at the cursor position and the editor
+   opens as a panel over the note, with an empty canvas as wide as the note's text column.
 2. **Given** the editor is open, **When** the user draws with the Pencil, **Then** ink follows the
    Pencil tip, with line thickness varying with pressure.
 3. **Given** the user has drawn strokes, **When** they tap Done, **Then** the editor closes, the note
@@ -72,8 +74,8 @@ those changes.
 **Acceptance Scenarios**:
 
 1. **Given** a note containing a drawing, shown in either the live editing view or the reading
-   view, **When** the user taps the preview, **Then** the full-screen editor opens showing the
-   existing strokes.
+   view, **When** the user taps the preview, **Then** the editor opens as a panel over the note,
+   showing the existing strokes.
 2. **Given** the eraser is active, **When** the user touches any part of a stroke with the Pencil,
    **Then** that whole stroke is removed.
 3. **Given** the user has made changes, **When** they tap Undo repeatedly, **Then** each change
@@ -219,9 +221,10 @@ becomes active and the toolbar shows it. Tap Pen with a finger; the pen is activ
 
 **Editing**
 
-- **FR-009**: Tapping a preview MUST open the editor for that block, full-screen and separate from
-  the note's text editing area, so that note text editing, cursor movement and handwriting-to-text
-  conversion cannot interfere with drawing.
+- **FR-009**: Tapping a preview MUST open the editor for that block as a panel outside and separate
+  from the note's text editing area (not inside its editable DOM), so that note text editing, cursor
+  movement and handwriting-to-text conversion cannot interfere with drawing. The panel MUST NOT cover
+  the entire screen; the rest of the note MUST remain visible around it.
 - **FR-010**: The editor MUST provide: pen, eraser, undo, redo, canvas resize, and Done.
 - **FR-011**: Only Pencil (stylus) contact MUST produce ink or erase; finger and palm contact MUST
   never create or erase strokes. Pencil hover MUST never draw.
@@ -325,6 +328,7 @@ becomes active and the toolbar shows it. Tap Pen with a finger; the pen is activ
 - "Width of the document" means the width of the note's readable text column on the device where
   the block is created; the stored size is fixed from then on and previews scale down only when the
   column is narrower.
-- Out of scope for this feature: handwriting search/OCR, drawing directly inside the note without
-  the full-screen editor, exporting drawings to image files, migrating drawings from the Ink plugin,
-  multiple pen colours/widths, partial (pixel) erasing, selection/move/lasso tools, zoom and pan.
+- Out of scope for this feature: handwriting search/OCR, drawing directly inside the note without a
+  separate editing surface, exporting drawings to image files, migrating drawings from the Ink
+  plugin, multiple pen colours/widths, partial (pixel) erasing, selection/move/lasso tools, zoom and
+  pan.

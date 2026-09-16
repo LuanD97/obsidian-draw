@@ -7,8 +7,9 @@
 ## Summary
 
 Build the v1 Obsidian plugin: an "Insert handwriting block" command, a code block processor that
-shows each `ink` block as a static, theme-coloured SVG preview, and a full-screen overlay editor
-(pen, whole-stroke eraser, undo/redo, resizable canvas, Done) attached to `document.body`. Drawings
+shows each `ink` block as a static, theme-coloured SVG preview, and an overlay editor panel
+(pen, whole-stroke eraser, undo/redo, resizable canvas, Done), sized to the drawing rather than the
+screen, attached to `document.body` outside the note's editable DOM. Drawings
 are stored inside the note as one fenced block with a single data line
 (`v1;id=…;WxH;<base64(deflate(varint deltas))>`). Saves go through `vault.process`, locate the block
 by id in the current file text, change only that line, and refuse to write when the block is missing
@@ -96,8 +97,7 @@ src/
 ├── main.ts                # Plugin class: registers processor + command (thin)
 ├── model/
 │   ├── types.ts
-│   ├── simplify.ts        # RDP
-│   ├── quantize.ts        # commitStroke
+│   ├── quantize.ts        # commitStroke (round + clamp + exact-duplicate dedupe, no simplification)
 │   ├── erase.ts           # hit testing
 │   ├── history.ts         # undo/redo commands
 │   └── canvas-size.ts     # default/min/clamp/fit

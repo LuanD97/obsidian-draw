@@ -33,10 +33,10 @@ export function newBlockMarkdown(d: Drawing): string;                           
 // src/format/id.ts
 export function generateId(random?: (n: number) => Uint8Array): string;        // 8 chars [0-9a-z]
 
-// src/model/simplify.ts
-export function simplify(points: RawPoint[], epsilon: number): RawPoint[];     // RDP on x,y
 // src/model/quantize.ts
-export function commitStroke(raw: RawPoint[], width: number, height: number): Stroke; // simplify + round + clamp
+export function commitStroke(raw: RawPoint[], width: number, height: number): Stroke;
+                              // round + clamp; drops a point only if it is an exact (x,y,pressure)
+                              // duplicate of the one before it - no geometric simplification (R5)
 
 // src/model/erase.ts
 export function hitStrokes(strokes: Stroke[], at: { x: number; y: number }, radius: number): number[]; // indices
