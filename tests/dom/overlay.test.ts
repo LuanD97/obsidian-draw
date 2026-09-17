@@ -78,7 +78,17 @@ describe('openOverlay', () => {
 		for (const [selector, label] of expected) {
 			const button = overlay.element.querySelector(selector);
 			expect(button?.getAttribute('aria-label')).toBe(label);
-			expect(button?.querySelector('svg')).not.toBeNull();
+			const svg = button?.querySelector('svg');
+			expect(svg).not.toBeNull();
+			// Guards against a blank-looking button: an <svg> can be present
+			// while carrying no drawable content (e.g. an ICONS entry left
+			// empty, or a path with an empty/missing `d`), which is exactly
+			// what "empty toolbar buttons" looks like to a user.
+			const paths = svg?.querySelectorAll('path') ?? [];
+			expect(paths.length).toBeGreaterThan(0);
+			for (const path of Array.from(paths)) {
+				expect(path.getAttribute('d')?.trim()).toBeTruthy();
+			}
 		}
 	});
 

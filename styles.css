@@ -66,6 +66,13 @@
 }
 
 .ink-toolbar button {
+	/* iOS Safari/WKWebView draws a native button face (a light, beveled pill)
+	   over a plain <button> regardless of `background`/`border` unless
+	   -webkit-appearance is reset - the native chrome paints over the child
+	   <svg>, which is exactly what an icon-only toolbar button with no visible
+	   glyph looks like. */
+	-webkit-appearance: none;
+	appearance: none;
 	display: flex;
 	align-items: center;
 	justify-content: center;
