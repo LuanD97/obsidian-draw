@@ -91,6 +91,21 @@ describe('clampSize', () => {
 		expect(result).toEqual({ width: 900, height: 900 });
 	});
 
+	// A live resize drag divides pointer deltas by the fit `scale`, which is
+	// rarely exactly 1, so the wanted size is routinely fractional. Storing a
+	// fractional width/height breaks `v1;id=...;WxH;...` grammar (`\d+` only)
+	// on the very next read, surfacing as "Can't read this drawing".
+	it('rounds a fractional wanted size to whole pixels', () => {
+		const result = clampSize(
+			{ width: 743.7, height: 304.2 },
+			{ width: 64, height: 64 },
+			{ width: 2000, height: 2000 },
+		);
+		expect(result).toEqual({ width: 744, height: 304 });
+		expect(Number.isInteger(result.width)).toBe(true);
+		expect(Number.isInteger(result.height)).toBe(true);
+	});
+
 	it('passes a value already inside the bounds through unchanged', () => {
 		const result = clampSize(
 			{ width: 700, height: 260 },

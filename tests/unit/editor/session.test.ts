@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { EditingSession } from '../../../src/editor/session';
-import { formatBlockLine } from '../../../src/format/block-line';
+import { formatBlockLine, parseBlockLine } from '../../../src/format/block-line';
 import type { Drawing, RawPoint } from '../../../src/model/types';
 
 function freshDrawing(): Drawing {
@@ -197,6 +197,29 @@ describe('EditingSession (resize)', () => {
 
 		expect(onChange).not.toHaveBeenCalled();
 		expect(session.canUndo()).toBe(false);
+	});
+
+	// The overlay's live resize drag divides a pointer delta by the fit scale
+	// (surface pixels -> canvas units), which is rarely exactly 1, so the
+	// wanted size handed to resize() is routinely fractional. If that leaked
+	// into drawing.width/height, the saved line's `WxH` header (grammar
+	// `\d+x\d+`, no decimal point) would fail to parse on the very next
+	// read/reopen - surfacing to the user as "Can't read this drawing".
+	it('a fractional resize still round-trips through the block line format', () => {
+		const session = new EditingSession(freshDrawing());
+		session.resize({ width: 743.7, height: 304.2 }, { width: 2000, height: 2000 });
+		expect(Number.isInteger(session.drawing.width)).toBe(true);
+		expect(Number.isInteger(session.drawing.height)).toBe(true);
+
+		// Draw beyond the old 700x260 bounds, into the newly enlarged area.
+		session.addStroke([
+			{ x: 720, y: 290, pressure: 0.5 },
+			{ x: 740, y: 300, pressure: 0.6 },
+		]);
+
+		const line = session.currentLine();
+		expect(() => parseBlockLine(line)).not.toThrow();
+		expect(parseBlockLine(line).strokes).toEqual(session.drawing.strokes);
 	});
 
 	it('undo/redo restore the size through the same history as pen/eraser commands', () => {

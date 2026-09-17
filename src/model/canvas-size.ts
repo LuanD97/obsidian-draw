@@ -49,7 +49,12 @@ function clampDimension(want: number, min: number, max: number): number {
 	// min wins when min > max: the effective ceiling can never drop below the
 	// floor, so a request is always clamped into [min, max(min, cappedMax)].
 	const effectiveMax = Math.max(min, Math.min(max, MAX_CANVAS_DIM));
-	return Math.min(effectiveMax, Math.max(min, want));
+	// Rounded, not just clamped: a live resize drag divides a pointer delta by
+	// the fit scale (rarely exactly 1), so `want` is routinely fractional. The
+	// stored width/height must stay a whole number - the block header grammar
+	// (`\d+x\d+`) has no room for a decimal point, and a fractional value
+	// written there fails to parse on the very next read.
+	return Math.round(Math.min(effectiveMax, Math.max(min, want)));
 }
 
 export function clampSize(want: Size, min: Size, max: Size): Size {
