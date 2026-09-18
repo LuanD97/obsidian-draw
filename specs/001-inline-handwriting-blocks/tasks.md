@@ -278,7 +278,7 @@ active tool and the toolbar highlight follow each tap.
 
 ## Phase 8: Polish & Cross-Cutting Concerns
 
-- [ ] T094 [P] Write `README.md`: what the plugin does, install via the vault's plugin folder, usage (command, mobile toolbar, editing), stored format summary linking contracts/block-format.md, development commands from quickstart.md
+- [X] T094 [P] Write `README.md`: what the plugin does, install via the vault's plugin folder, usage (command, mobile toolbar, editing), stored format summary linking contracts/block-format.md, development commands from quickstart.md
 - [ ] T095 [P] Update `CLAUDE.md` "Status" and "Suggested next steps" to reflect the implemented v1 and point at `specs/001-inline-handwriting-blocks/`
 - [ ] T096 [P] Reconcile [contracts/core-api.md](./contracts/core-api.md) and [plan.md](./plan.md) with the final module signatures and file list
 - [ ] T097 Record the production `main.js` size in plan.md Complexity Tracking; if it exceeds ~60 KB, investigate the import graph (e.g. fflate not tree-shaken)
