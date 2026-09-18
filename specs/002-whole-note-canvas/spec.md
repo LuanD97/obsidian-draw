@@ -4,7 +4,7 @@
 
 **Created**: 2026-09-18
 
-**Status**: Draft
+**Status**: Planned (spec + plan complete; see [plan.md](./plan.md))
 
 **Input**: User description: "in a separate worktree of this repo, I want to explore the feature where instead of the strokes being stored in a discrete canvas, whether I can have strokes for live editing of typed text on the margins etc. so the whole .md file is a canvas"
 
