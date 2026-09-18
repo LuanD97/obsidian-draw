@@ -148,6 +148,36 @@ describe('openOverlay', () => {
 		expect(document.body.contains(overlay.element)).toBe(false);
 	});
 
+	it('tapping the scrim outside the panel closes via flush, like Done', async () => {
+		const session = new EditingSession(freshDrawing());
+		session.addStroke([
+			{ x: 0, y: 0, pressure: 0.5 },
+			{ x: 10, y: 10, pressure: 0.5 },
+		]);
+		const deps = makeDeps({ session });
+		const overlay = openOverlay(deps);
+
+		overlay.element.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+		await Promise.resolve();
+		await Promise.resolve();
+
+		expect(deps.flush).toHaveBeenCalledTimes(1);
+		expect(document.body.contains(overlay.element)).toBe(false);
+	});
+
+	it('tapping inside the panel does not close the overlay', async () => {
+		const deps = makeDeps();
+		const overlay = openOverlay(deps);
+		const panel = overlay.element.querySelector('.ink-panel') as HTMLElement;
+
+		panel.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+		await Promise.resolve();
+		await Promise.resolve();
+
+		expect(deps.flush).not.toHaveBeenCalled();
+		expect(document.body.contains(overlay.element)).toBe(true);
+	});
+
 	it('still draws when a pen pointermove event lacks getCoalescedEvents', () => {
 		const deps = makeDeps();
 		const overlay = openOverlay(deps);

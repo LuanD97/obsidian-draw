@@ -54,7 +54,7 @@ function iconButton(doc: Document, name: keyof typeof ICONS, label: string): HTM
 	const button = doc.createElement('button');
 	button.setAttribute('aria-label', label);
 	button.title = label;
-	button.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name]}</svg>`;
+	button.innerHTML = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name]}</svg>`;
 	return button;
 }
 
@@ -358,6 +358,16 @@ export function openOverlay(deps: OpenOverlayDeps): OverlayHandle {
 
 	doneButton.addEventListener('click', () => {
 		void close({ reason: 'done' });
+	});
+
+	// Tapping the dim scrim outside the panel closes like Done (flush, then
+	// close): e.target === overlay only when the tap landed on the scrim
+	// itself, not when a click on a descendant (toolbar button, surface,
+	// panel background) bubbles up here.
+	overlay.addEventListener('click', (e) => {
+		if (e.target === overlay) {
+			void close();
+		}
 	});
 
 	return { element: overlay, close };

@@ -87,8 +87,16 @@
 }
 
 .ink-toolbar button svg {
-	width: 60%;
-	height: 60%;
+	/* Not a percentage: a percentage width on a flex item (the button's main
+	   axis) resolves against an indefinite flex-basis in WebKit and computes
+	   to 0, even though the matching percentage height (cross axis, sized
+	   against the button's definite height) resolves fine - verified on
+	   iPad via Safari Web Inspector, box model showed a real 0 x ~13px. A
+	   fixed size sidesteps that percentage-resolution path entirely. 1.2em
+	   matches the old 60% of the button's 2em box. */
+	width: 1.2em;
+	height: 1.2em;
+	flex-shrink: 0;
 }
 
 .ink-toolbar button:hover {
