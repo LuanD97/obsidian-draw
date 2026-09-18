@@ -52,3 +52,47 @@ export async function saveExistingAnnotation(
 	}
 	return { kind };
 }
+
+export interface DirtyAnnotationSave {
+	id: string;
+	line: string;
+	// The pen-down offset to anchor a brand-new annotation to; null for an
+	// annotation that has already been saved at least once (located by id
+	// and updated in place instead).
+	pos: number | null;
+}
+
+// One SaveQueue instance covers a whole open Canvas Mode note (data-model.md
+// CanvasModeNoteState), so a single debounced save may need to persist
+// several dirty annotations at once; this applies every pending one inside
+// one vault.process call, so the note is only rewritten once per save tick.
+export async function saveDirtyAnnotations(
+	vault: ProcessingVault,
+	file: TFileLike,
+	entries: DirtyAnnotationSave[],
+): Promise<AnnotationSaveOutcome> {
+	if (entries.length === 0) return { kind: 'unchanged' };
+
+	let kind: AnnotationSaveOutcome['kind'] = 'unchanged';
+	try {
+		await vault.process(file, (data) => {
+			let text = data;
+			for (const entry of entries) {
+				if (entry.pos !== null) {
+					const blockMarkdown = '```ink-canvas\n' + entry.line + '\n```\n';
+					text = insertAnnotationAfterParagraph(text, entry.pos, blockMarkdown);
+					kind = 'updated';
+					continue;
+				}
+				const result = applyAnnotationUpdate(text, entry.id, entry.line);
+				text = result.text;
+				if (result.kind === 'updated') kind = 'updated';
+				else if (kind === 'unchanged') kind = result.kind;
+			}
+			return text;
+		});
+	} catch {
+		return { kind: 'file-missing' };
+	}
+	return { kind };
+}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { saveNewAnnotation, saveExistingAnnotation } from '../../../src/canvas/save';
+import { saveNewAnnotation, saveExistingAnnotation, saveDirtyAnnotations } from '../../../src/canvas/save';
 import { FakeVault } from '../fake-vault';
 
 describe('saveNewAnnotation', () => {
@@ -50,5 +50,44 @@ describe('saveExistingAnnotation', () => {
 
 		expect(outcome).toEqual({ kind: 'not-found' });
 		expect(vault.read(path)).toBe(before);
+	});
+});
+
+describe('saveDirtyAnnotations', () => {
+	it('returns unchanged and does not touch the file for an empty entry list', async () => {
+		const path = 'note.md';
+		const before = 'para one\n';
+		const vault = new FakeVault({ [path]: before });
+
+		const outcome = await saveDirtyAnnotations(vault, { path }, []);
+
+		expect(outcome).toEqual({ kind: 'unchanged' });
+		expect(vault.read(path)).toBe(before);
+	});
+
+	it('inserts a brand-new annotation and updates an existing one in a single vault.process call', async () => {
+		const path = 'note.md';
+		const before = 'para one\n\n```ink-canvas\ncv1;id=bbbbbbbb;OLD\n```\n\npara two\n';
+		const vault = new FakeVault({ [path]: before });
+		const pos = before.indexOf('para one');
+
+		const outcome = await saveDirtyAnnotations(vault, { path }, [
+			{ id: 'bbbbbbbb', line: 'cv1;id=bbbbbbbb;NEW', pos: null },
+			{ id: 'aaaaaaaa', line: 'cv1;id=aaaaaaaa;', pos },
+		]);
+
+		expect(outcome).toEqual({ kind: 'updated' });
+		const saved = vault.read(path) as string;
+		expect(saved).toContain('cv1;id=bbbbbbbb;NEW');
+		expect(saved).not.toContain('cv1;id=bbbbbbbb;OLD');
+		expect(saved).toContain('cv1;id=aaaaaaaa;');
+	});
+
+	it('returns file-missing when the file no longer exists', async () => {
+		const vault = new FakeVault({});
+		const outcome = await saveDirtyAnnotations(vault, { path: 'gone.md' }, [
+			{ id: 'aaaaaaaa', line: 'cv1;id=aaaaaaaa;', pos: 0 },
+		]);
+		expect(outcome).toEqual({ kind: 'file-missing' });
 	});
 });

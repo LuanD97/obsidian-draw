@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { computeMarginBands } from '../../../src/canvas/layout';
+import { computeMarginBands, toOverlayPoint } from '../../../src/canvas/layout';
 
 describe('computeMarginBands', () => {
 	it('computes symmetric left/right bands for a centered content column', () => {
@@ -24,5 +24,22 @@ describe('computeMarginBands', () => {
 		const bands = computeMarginBands(600, 0, 700);
 		expect(bands.left.width).toBe(0);
 		expect(bands.right.width).toBe(0);
+	});
+});
+
+describe('toOverlayPoint', () => {
+	it('converts a client point at the scroller origin with no scroll to (0, 0)', () => {
+		const point = toOverlayPoint({ x: 100, y: 50 }, { left: 100, top: 50 }, { left: 0, top: 0 });
+		expect(point).toEqual({ x: 0, y: 0 });
+	});
+
+	it('adds the current scroll offset', () => {
+		const point = toOverlayPoint({ x: 120, y: 80 }, { left: 100, top: 50 }, { left: 0, top: 400 });
+		expect(point).toEqual({ x: 20, y: 430 });
+	});
+
+	it('accounts for the scroller not starting at the viewport origin', () => {
+		const point = toOverlayPoint({ x: 250, y: 150 }, { left: 200, top: 100 }, { left: 0, top: 0 });
+		expect(point).toEqual({ x: 50, y: 50 });
 	});
 });

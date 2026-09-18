@@ -159,3 +159,28 @@
 .ink-resize-handle:active {
 	opacity: 1;
 }
+
+/* Canvas Mode: inserted as a sibling of .cm-content, inside .cm-scroller
+   (research.md R2), sized in JS to match .cm-content's full scrollable
+   area rather than just the viewport, so it scrolls natively with the note
+   with no manual scroll-offset bookkeeping. */
+.canvas-mode-overlay {
+	position: absolute;
+	top: 0;
+	left: 0;
+	/* Drawing itself is handled by capturing-phase pointer listeners on
+	   .cm-scroller (research.md R1), not by this layer receiving events -
+	   it must never intercept touch/mouse interaction with the note
+	   underneath (scrolling, cursor placement, selection). */
+	pointer-events: none;
+	z-index: 1;
+}
+
+.canvas-mode-surface {
+	position: absolute;
+	top: 0;
+	left: 0;
+	width: 100%;
+	height: 100%;
+	pointer-events: none;
+}

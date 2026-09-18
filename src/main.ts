@@ -1,8 +1,13 @@
 import { MarkdownRenderChild, MarkdownView, Notice, Plugin, TFile } from 'obsidian';
+import { EditorView } from '@codemirror/view';
 import { renderInkBlock } from './obsidian/preview-processor';
 import { createInsertCommand } from './obsidian/insert-command';
 import { openEditorFlow } from './obsidian/flows';
 import { openOverlay, type OverlayHandle } from './editor/overlay';
+import { canvasAnnotationViewPlugin } from './canvas/view-plugin';
+import { canvasLiveViewPlugin, getCanvasSession, type CanvasLivePluginInstance } from './canvas/live-plugin';
+import { CanvasModeSession } from './canvas/live-session';
+import { isCanvasModeEnabled, setCanvasModeEnabled } from './canvas/frontmatter';
 import type { EditingSession } from './editor/session';
 import type { SaveQueue } from './editor/save-queue';
 import type { TFileLike } from './obsidian/vault-save';
@@ -12,6 +17,11 @@ import type { TFileLike } from './obsidian/vault-save';
 // decisions of its own; every function it calls is already tested.
 export default class DrawPlugin extends Plugin {
 	private overlayHandle: OverlayHandle | null = null;
+
+	// Canvas Mode: at most one note's session is active at a time (plan.md
+	// Scale/Scope), tracked directly rather than by re-scanning open leaves.
+	private activeCanvasFile: TFile | null = null;
+	private activeCanvasPlugin: CanvasLivePluginInstance | null = null;
 
 	onload(): void {
 		this.registerMarkdownCodeBlockProcessor('ink', (source, el, ctx) => {
@@ -33,10 +43,99 @@ export default class DrawPlugin extends Plugin {
 				},
 			}),
 		);
+
+		// canvasAnnotationViewPlugin (hides raw ink-canvas block source) is
+		// unconditional, for every note, per research.md R4. canvasLiveViewPlugin
+		// only ever does anything once this.activateCanvasSession gives it a
+		// session (contracts/canvas-mode-toggle.md "Activation scope").
+		this.registerEditorExtension([canvasAnnotationViewPlugin, canvasLiveViewPlugin]);
+
+		this.addCommand({
+			id: 'toggle-canvas-mode',
+			name: 'Turn note into canvas',
+			icon: 'layout-panel-top',
+			checkCallback: (checking) => {
+				const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+				if (!view?.file) return false;
+				if (!checking) void this.toggleCanvasMode(view);
+				return true;
+			},
+		});
+
+		this.registerEvent(this.app.workspace.on('active-leaf-change', () => this.syncCanvasSession()));
+		this.registerEvent(this.app.workspace.on('file-open', () => this.syncCanvasSession()));
+		this.app.workspace.onLayoutReady(() => this.syncCanvasSession());
 	}
 
 	onunload(): void {
 		void this.overlayHandle?.close({ reason: 'unload' });
+		this.deactivateCanvasSession();
+	}
+
+	// Community-plugin convention: Obsidian's public Editor API doesn't
+	// expose the underlying CM6 EditorView, but MarkdownView's editor always
+	// carries one at `.cm` in practice. @codemirror/view is externalized at
+	// build time (esbuild.config.mjs), so at runtime this is literally
+	// Obsidian's own EditorView class — the instanceof check is exact, and a
+	// mismatch (a future Obsidian internal change) degrades to Canvas Mode
+	// simply not activating for that view rather than throwing.
+	private getEditorView(view: MarkdownView): EditorView | null {
+		const cm = (view.editor as unknown as { cm?: unknown }).cm;
+		return cm instanceof EditorView ? cm : null;
+	}
+
+	private async toggleCanvasMode(view: MarkdownView): Promise<void> {
+		const file = view.file;
+		if (!file) return;
+		const currentlyEnabled = isCanvasModeEnabled(this.app.metadataCache.getFileCache(file)?.frontmatter);
+		await this.app.fileManager.processFrontMatter(file, (fm) => {
+			setCanvasModeEnabled(fm, !currentlyEnabled);
+		});
+		this.syncCanvasSession();
+	}
+
+	// Activates/deactivates the live Canvas Mode surface to match whichever
+	// note is active and whether it currently has canvas-mode: true —
+	// covering both the toggle command and switching to/from an
+	// already-enabled note (contracts/canvas-mode-toggle.md "Activation scope").
+	private syncCanvasSession(): void {
+		const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+		const file = view?.file ?? null;
+		const enabled = file ? isCanvasModeEnabled(this.app.metadataCache.getFileCache(file)?.frontmatter) : false;
+
+		if (this.activeCanvasFile && (this.activeCanvasFile !== file || !enabled)) {
+			this.deactivateCanvasSession();
+		}
+
+		if (enabled && file && view && this.activeCanvasFile !== file) {
+			this.activateCanvasSession(view, file);
+		}
+	}
+
+	private activateCanvasSession(view: MarkdownView, file: TFile): void {
+		const editorView = this.getEditorView(view);
+		if (!editorView) return;
+		const plugin = getCanvasSession(editorView);
+		if (!plugin) return;
+
+		plugin.session = new CanvasModeSession({
+			view: editorView,
+			file: file as TFileLike,
+			vault: { process: (f, fn) => this.app.vault.process(f as unknown as TFile, fn) },
+			getStrokeColor: () => getComputedStyle(document.body).getPropertyValue('--text-normal').trim(),
+			dpr: window.devicePixelRatio,
+		});
+		this.activeCanvasFile = file;
+		this.activeCanvasPlugin = plugin;
+	}
+
+	private deactivateCanvasSession(): void {
+		if (this.activeCanvasPlugin?.session) {
+			void this.activeCanvasPlugin.session.destroy();
+			this.activeCanvasPlugin.session = null;
+		}
+		this.activeCanvasPlugin = null;
+		this.activeCanvasFile = null;
 	}
 
 	private openEditor(sourcePath: string, id: string): void {

@@ -33,3 +33,18 @@ export function measureMarginBands(scroller: HTMLElement, content: HTMLElement):
 	const contentRect = content.getBoundingClientRect();
 	return computeMarginBands(scrollerRect.width, contentRect.left - scrollerRect.left, contentRect.width);
 }
+
+// Converts a viewport (client) point into a position on the overlay, which is
+// a normal scrolling child of `.cm-scroller` (research.md R2) — so a point's
+// position within it is the client point relative to the scroller's own
+// top-left, plus how far the scroller has already scrolled.
+export function toOverlayPoint(
+	client: { x: number; y: number },
+	scrollerRect: { left: number; top: number },
+	scrollOffset: { left: number; top: number },
+): { x: number; y: number } {
+	return {
+		x: client.x - scrollerRect.left + scrollOffset.left,
+		y: client.y - scrollerRect.top + scrollOffset.top,
+	};
+}

@@ -81,16 +81,17 @@ function appendAtEnd(text: string, blockMarkdown: string): string {
 	return text + '\n\n' + blockMarkdown;
 }
 
-// Inserts blockMarkdown as its own paragraph (blank line before and after)
-// right after the paragraph containing/nearest-before `pos`, and after any
-// "ink"/"ink-canvas" blocks that already immediately trail that paragraph —
-// so a note's annotations accumulate in drawing order rather than being
-// inserted ahead of ones already there (data-model.md "New annotation" save
-// flow).
-export function insertAnnotationAfterParagraph(text: string, pos: number, blockMarkdown: string): string {
+// The character offset right after the paragraph containing/nearest-before
+// `pos`, and after any "ink"/"ink-canvas" blocks that already immediately
+// trail that paragraph — i.e. exactly where a new annotation's block would be
+// inserted. Returns `text.length` when that's the end of the file (no
+// following paragraph). Exposed separately from insertAnnotationAfterParagraph
+// so glue code can resolve the same position a new annotation's block will
+// occupy (e.g. to anchor it) before actually writing anything.
+export function findInsertionPoint(text: string, pos: number): number {
 	const lines = splitLines(text);
 	const chunks = chunkify(text, lines);
-	if (chunks.length === 0) return appendAtEnd(text, blockMarkdown);
+	if (chunks.length === 0) return text.length;
 
 	let lineIndex = 0;
 	for (let i = 0; i < lines.length; i++) {
@@ -112,10 +113,21 @@ export function insertAnnotationAfterParagraph(text: string, pos: number, blockM
 		nextIndex += 1;
 	}
 
-	if (nextIndex >= chunks.length) {
+	if (nextIndex >= chunks.length) return text.length;
+
+	return (lines[(chunks[nextIndex] as Chunk).startLine] as Line).start;
+}
+
+// Inserts blockMarkdown as its own paragraph (blank line before and after)
+// right after the paragraph containing/nearest-before `pos`, and after any
+// "ink"/"ink-canvas" blocks that already immediately trail that paragraph —
+// so a note's annotations accumulate in drawing order rather than being
+// inserted ahead of ones already there (data-model.md "New annotation" save
+// flow).
+export function insertAnnotationAfterParagraph(text: string, pos: number, blockMarkdown: string): string {
+	const insertOffset = findInsertionPoint(text, pos);
+	if (insertOffset >= text.length) {
 		return appendAtEnd(text, blockMarkdown);
 	}
-
-	const insertOffset = (lines[(chunks[nextIndex] as Chunk).startLine] as Line).start;
 	return text.slice(0, insertOffset) + blockMarkdown + '\n' + text.slice(insertOffset);
 }

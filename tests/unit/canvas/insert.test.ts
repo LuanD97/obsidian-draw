@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { insertAnnotationAfterParagraph } from '../../../src/canvas/insert';
+import { insertAnnotationAfterParagraph, findInsertionPoint } from '../../../src/canvas/insert';
 
 const NEW_BLOCK = '```ink-canvas\ncv1;id=newnewnw;\n```\n';
 
@@ -65,5 +65,26 @@ describe('insertAnnotationAfterParagraph', () => {
 		const result = insertAnnotationAfterParagraph(text, pos, NEW_BLOCK);
 
 		expect(result).toBe('para one\r\n\r\n' + NEW_BLOCK + '\npara two\r\n');
+	});
+});
+
+describe('findInsertionPoint', () => {
+	it('returns the offset right before the next paragraph', () => {
+		const text = 'para one\n\npara two\n';
+		expect(findInsertionPoint(text, 0)).toBe(text.indexOf('para two'));
+	});
+
+	it('returns text.length when there is no following paragraph', () => {
+		const text = 'para one\n\npara two\n';
+		expect(findInsertionPoint(text, text.indexOf('para two'))).toBe(text.length);
+	});
+
+	it('matches the position insertAnnotationAfterParagraph actually inserts at', () => {
+		const text = 'para one\n\npara two\n';
+		const block = '```ink-canvas\ncv1;id=aaaaaaaa;\n```\n';
+		const offset = findInsertionPoint(text, 0);
+		const inserted = insertAnnotationAfterParagraph(text, 0, block);
+		expect(inserted.slice(0, offset)).toBe(text.slice(0, offset));
+		expect(inserted.slice(offset, offset + block.length)).toBe(block);
 	});
 });

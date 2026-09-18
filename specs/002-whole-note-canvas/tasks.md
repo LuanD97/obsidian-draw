@@ -179,15 +179,15 @@ same position relative to that paragraph (quickstart manual items 1–5).
   `newAnnotationMarkdown`; existing annotation → `applyAnnotationUpdate`) wired through the existing
   `editor/save-queue.ts` `SaveQueue` (reused unchanged, one instance per open Canvas Mode note) to pass
   T019 (depends on T005, T009, T011, T020)
-- [ ] T027 [US1] Glue: implement `isCanvasModeEnabled`/toggle wiring — the "Turn note into canvas"
+- [X] T027 [US1] Glue: implement `isCanvasModeEnabled`/toggle wiring — the "Turn note into canvas"
   command (`src/canvas/frontmatter.ts` + `app.fileManager.processFrontMatter`, per
   contracts/canvas-mode-toggle.md), registering/deregistering the CM6 `ViewPlugin` (T022) and pointer
   capture (T023) for the active editor view; no data-handling decisions of its own
-- [ ] T028 [US1] Glue: wire `src/main.ts`: register the "Turn note into canvas" command (addable to the
+- [X] T028 [US1] Glue: wire `src/main.ts`: register the "Turn note into canvas" command (addable to the
   mobile toolbar per FR-001a), activate/deactivate Canvas Mode when the active leaf changes to/from a
   `canvas-mode: true` note (contracts/canvas-mode-toggle.md "Activation scope"), hold the
   `CanvasModeNoteState`/`SaveQueue` per open note
-- [ ] T029 [US1] Write `styles.css` additions for `.canvas-mode-overlay` (`position: absolute`,
+- [X] T029 [US1] Write `styles.css` additions for `.canvas-mode-overlay` (`position: absolute`,
   `pointer-events: none`, sized to the scroller) and any live-stroke drawing layer, using only
   Obsidian CSS variables (mirrors spec 001's `.ink-overlay`/`.ink-surface` conventions)
 - [ ] T030 [US1] Gate: `npm run typecheck && npm test && npm run build`; then `npm run deploy` and run
