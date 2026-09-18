@@ -210,18 +210,18 @@ reopening the note and after retyping/reformatting surrounding sentences (quicks
 
 ### Tests for User Story 2 (write first, confirm they fail) ⚠️
 
-- [ ] T031 [P] [US2] Red: extend `tests/unit/canvas/session.test.ts`: a stroke whose pen-down point is
+- [X] T031 [P] [US2] Red: extend `tests/unit/canvas/session.test.ts`: a stroke whose pen-down point is
   over existing typed text (not blank margin space) still resolves to the nearest preceding paragraph
   as its anchor, exactly like a margin stroke — there is no separate code path for "over text" vs.
   "in the margin" (US2 Acceptance Scenario 1, confirms R3's anchoring is position-based, not
   region-based)
-- [ ] T032 [P] [US2] Red: extend `tests/dom/canvas/pointer-capture.test.ts`: a pen `pointerdown`
+- [X] T032 [P] [US2] Red: extend `tests/dom/canvas/pointer-capture.test.ts`: a pen `pointerdown`
   directly over a `.cm-line` element (simulated) is still intercepted and prevented, confirming the
   capture listener isn't scoped only to margin/empty areas
 
 ### Implementation for User Story 2
 
-- [ ] T033 [US2] Green: confirm T031/T032 pass against the User Story 1 implementation with no
+- [X] T033 [US2] Green: confirm T031/T032 pass against the User Story 1 implementation with no
   production code changes required (per research.md R3, anchoring is already position-based and R1's
   capture listener is already note-wide); if either test exposes a gap, fix it test-first here rather
   than in US1's files retroactively
@@ -244,19 +244,19 @@ renders as one continuous mark after reopening (quickstart manual item 7).
 
 ### Tests for User Story 3 (write first, confirm they fail) ⚠️
 
-- [ ] T035 [P] [US3] Red: extend `tests/unit/canvas/annotation-line.test.ts`/`codec` usage: a stroke
+- [X] T035 [P] [US3] Red: extend `tests/unit/canvas/annotation-line.test.ts`/`codec` usage: a stroke
   whose points range far outside a small margin-sized bounding box (e.g., spanning 300+ canvas units)
   round-trips exactly through `parseAnnotationLine`/`formatAnnotationLine`, confirming no clamping is
   applied anywhere in the Canvas Mode encode path (research.md R7, contrasted explicitly with Block
   Mode's `[0,width]×[0,height]` clamp)
-- [ ] T036 [P] [US3] Red: extend `tests/unit/canvas/session.test.ts`: a stroke started at a margin
+- [X] T036 [P] [US3] Red: extend `tests/unit/canvas/session.test.ts`: a stroke started at a margin
   point and continued to a point far into the text column is stored as a single stroke in one
   annotation (the one anchored to the paragraph nearest the start point), never split into two
   annotations or truncated at the margin/text boundary
 
 ### Implementation for User Story 3
 
-- [ ] T037 [US3] Green: confirm T035/T036 pass with no production changes (per research.md R6's
+- [X] T037 [US3] Green: confirm T035/T036 pass with no production changes (per research.md R6's
   unbounded sanity check and R7's single-anchor-per-stroke rule, already implemented in Phase 2/3); if
   a gap is found (e.g., an accidental clamp inherited from reusing Block Mode code paths), fix it
   test-first
@@ -272,7 +272,7 @@ cannot offer (plan.md Summary) — its result is the strongest single input to t
 
 **Purpose**: Edge-case outcomes and the spike's required conclusion (FR-011, SC-002, SC-004).
 
-- [ ] T039 [P] Red then Green: tests + implementation for the "paragraph deleted" and "duplicate
+- [X] T039 [P] Red then Green: tests + implementation for the "paragraph deleted" and "duplicate
   annotation id" edge cases in `tests/integration/canvas/reflow-save.test.ts` (FakeVault-based,
   mirrors spec 001's concurrent-edits suite pattern): deleting an annotation's anchor paragraph leaves
   the file uncorrupted and the block reattached to whatever now precedes it; a duplicated `ink-canvas`
@@ -283,7 +283,7 @@ cannot offer (plan.md Summary) — its result is the strongest single input to t
 - [ ] T041 [P] Run quickstart manual items 8 (erase/undo), 9 (deleted paragraph, on-device), and 11
   (Block Mode coexistence) — record outcomes, including whether "Insert handwriting block" and
   "Turn note into canvas" interfered in any way (FR-001a)
-- [ ] T042 Full gate: `npm run typecheck && npm test && npm run build`, all green, on the final state
+- [X] T042 Full gate: `npm run typecheck && npm test && npm run build`, all green, on the final state
   of all three user stories together
 - [ ] T043 Write the `## Go/No-Go Recommendation` section in quickstart.md (or a sibling
   `recommendation.md`) per its "Concluding the spike" instructions: which stories felt natural, which

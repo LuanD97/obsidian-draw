@@ -56,4 +56,28 @@ describe('CanvasModeNoteState add-stroke path', () => {
 		const id = state.addStroke(stroke({ x: 1, y: 1 }));
 		expect(id).toBe('fixedid0');
 	});
+
+	it('treats a pen-down point "over text" exactly like one in blank margin space — no separate code path (US2)', () => {
+		// addStroke has no notion of "margin" vs "text": it only ever sees
+		// numeric points. Two pen-downs at unrelated locations (standing in for
+		// "in the margin" and "over typed text") go through the exact same
+		// resolution logic and each start their own annotation, confirming
+		// there is nothing region-specific to branch on (research.md R3).
+		const state = new CanvasModeNoteState();
+		const marginId = state.addStroke(stroke({ x: 5, y: 100 }));
+		const overTextId = state.addStroke(stroke({ x: 300, y: 100 }));
+
+		expect(marginId).not.toBe(overTextId);
+		expect(state.annotations.size).toBe(2);
+	});
+
+	it('stores a stroke that starts in the margin and continues far into the text column as one unbroken stroke (US3)', () => {
+		const state = new CanvasModeNoteState();
+		const id = state.addStroke(stroke({ x: 5, y: 100 }, { x: 100, y: 105 }, { x: 320, y: 98 }));
+
+		expect(state.annotations.size).toBe(1);
+		const annotation = state.annotations.get(id)!;
+		expect(annotation.strokes).toHaveLength(1);
+		expect(annotation.strokes[0]!.points).toHaveLength(3);
+	});
 });

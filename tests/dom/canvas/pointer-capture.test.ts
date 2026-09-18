@@ -100,6 +100,21 @@ describe('attachPointerCapture', () => {
 		expect(handlers.onPenEnd).toHaveBeenCalledTimes(1);
 	});
 
+	it('intercepts a pen pointerdown directly over a .cm-line element, not just empty/margin areas (US2)', () => {
+		const { root } = makeRootWithChild();
+		const line = document.createElement('div');
+		line.className = 'cm-line';
+		line.textContent = 'some typed text';
+		root.appendChild(line);
+		const handlers = noopHandlers();
+		attachPointerCapture(root, handlers);
+
+		const event = dispatchPointer(line, 'pointerdown', { pointerType: 'pen', buttons: 1 });
+
+		expect(event.defaultPrevented).toBe(true);
+		expect(handlers.onPenStart).toHaveBeenCalledTimes(1);
+	});
+
 	it('stops intercepting after the returned detach function is called', () => {
 		const { root, child } = makeRootWithChild();
 		const handlers = noopHandlers();

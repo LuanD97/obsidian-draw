@@ -54,14 +54,14 @@ describe('saveExistingAnnotation', () => {
 });
 
 describe('saveDirtyAnnotations', () => {
-	it('returns unchanged and does not touch the file for an empty entry list', async () => {
+	it('returns an empty map and does not touch the file for an empty entry list', async () => {
 		const path = 'note.md';
 		const before = 'para one\n';
 		const vault = new FakeVault({ [path]: before });
 
-		const outcome = await saveDirtyAnnotations(vault, { path }, []);
+		const outcomes = await saveDirtyAnnotations(vault, { path }, []);
 
-		expect(outcome).toEqual({ kind: 'unchanged' });
+		expect(outcomes.size).toBe(0);
 		expect(vault.read(path)).toBe(before);
 	});
 
@@ -71,23 +71,45 @@ describe('saveDirtyAnnotations', () => {
 		const vault = new FakeVault({ [path]: before });
 		const pos = before.indexOf('para one');
 
-		const outcome = await saveDirtyAnnotations(vault, { path }, [
+		const outcomes = await saveDirtyAnnotations(vault, { path }, [
 			{ id: 'bbbbbbbb', line: 'cv1;id=bbbbbbbb;NEW', pos: null },
 			{ id: 'aaaaaaaa', line: 'cv1;id=aaaaaaaa;', pos },
 		]);
 
-		expect(outcome).toEqual({ kind: 'updated' });
+		expect(outcomes.get('bbbbbbbb')).toEqual({ kind: 'updated' });
+		expect(outcomes.get('aaaaaaaa')).toEqual({ kind: 'updated' });
 		const saved = vault.read(path) as string;
 		expect(saved).toContain('cv1;id=bbbbbbbb;NEW');
 		expect(saved).not.toContain('cv1;id=bbbbbbbb;OLD');
 		expect(saved).toContain('cv1;id=aaaaaaaa;');
 	});
 
-	it('returns file-missing when the file no longer exists', async () => {
-		const vault = new FakeVault({});
-		const outcome = await saveDirtyAnnotations(vault, { path: 'gone.md' }, [
-			{ id: 'aaaaaaaa', line: 'cv1;id=aaaaaaaa;', pos: 0 },
+	it('reports a duplicate id as a per-entry failure without masking another entry that succeeded', async () => {
+		const path = 'note.md';
+		const dupeBlock = '```ink-canvas\ncv1;id=bbbbbbbb;\n```\n';
+		const before = dupeBlock + '\n' + dupeBlock + '\n```ink-canvas\ncv1;id=aaaaaaaa;OLD\n```\n';
+		const vault = new FakeVault({ [path]: before });
+
+		const outcomes = await saveDirtyAnnotations(vault, { path }, [
+			{ id: 'bbbbbbbb', line: 'cv1;id=bbbbbbbb;NEW', pos: null },
+			{ id: 'aaaaaaaa', line: 'cv1;id=aaaaaaaa;NEW', pos: null },
 		]);
-		expect(outcome).toEqual({ kind: 'file-missing' });
+
+		expect(outcomes.get('bbbbbbbb')).toEqual({ kind: 'duplicate' });
+		expect(outcomes.get('aaaaaaaa')).toEqual({ kind: 'updated' });
+		const saved = vault.read(path) as string;
+		expect(saved).toContain('cv1;id=aaaaaaaa;NEW');
+		// the duplicated blocks are both left exactly as they were
+		expect(saved).toContain(dupeBlock);
+	});
+
+	it('returns file-missing for every entry when the file no longer exists', async () => {
+		const vault = new FakeVault({});
+		const outcomes = await saveDirtyAnnotations(vault, { path: 'gone.md' }, [
+			{ id: 'aaaaaaaa', line: 'cv1;id=aaaaaaaa;', pos: 0 },
+			{ id: 'bbbbbbbb', line: 'cv1;id=bbbbbbbb;', pos: null },
+		]);
+		expect(outcomes.get('aaaaaaaa')).toEqual({ kind: 'file-missing' });
+		expect(outcomes.get('bbbbbbbb')).toEqual({ kind: 'file-missing' });
 	});
 });

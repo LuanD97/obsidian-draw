@@ -88,6 +88,27 @@ describe('parseAnnotationLine rejections', () => {
 		}
 	});
 
+	it('round-trips a stroke spanning 300+ canvas units with no clamping (US3 spanning strokes)', () => {
+		// Unlike Block Mode's ink v1 (clamped to [0, width] x [0, height]),
+		// Canvas Mode has no bounded canvas: a stroke connecting a margin note
+		// to text elsewhere must be storable and readable back exactly,
+		// however far its points range from the anchor (research.md R7).
+		const spanning: Annotation = {
+			id: 'c3d4e5f6',
+			strokes: [
+				{
+					points: [
+						{ x: -20, y: 0, p: 80 },
+						{ x: 150, y: 40, p: 90 },
+						{ x: 330, y: -60, p: 100 },
+					],
+				},
+			],
+		};
+		const line = formatAnnotationLine(spanning);
+		expect(parseAnnotationLine(line)).toEqual(spanning);
+	});
+
 	it('ignores trailing whitespace', () => {
 		const line = formatAnnotationLine(emptyAnnotation);
 		expect(parseAnnotationLine(line + '   \n')).toEqual(emptyAnnotation);

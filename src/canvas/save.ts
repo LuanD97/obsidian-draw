@@ -66,14 +66,19 @@ export interface DirtyAnnotationSave {
 // CanvasModeNoteState), so a single debounced save may need to persist
 // several dirty annotations at once; this applies every pending one inside
 // one vault.process call, so the note is only rewritten once per save tick.
+// Returns a per-id outcome (rather than one aggregate) so a caller can clear
+// only the ids that actually succeeded and keep retrying the rest — folding
+// every entry into one aggregate kind would let one annotation's `duplicate`
+// (save refused) get masked by another's `updated` in the same batch,
+// silently dropping the failed one from future retries (constitution III).
 export async function saveDirtyAnnotations(
 	vault: ProcessingVault,
 	file: TFileLike,
 	entries: DirtyAnnotationSave[],
-): Promise<AnnotationSaveOutcome> {
-	if (entries.length === 0) return { kind: 'unchanged' };
+): Promise<Map<string, AnnotationSaveOutcome>> {
+	const outcomes = new Map<string, AnnotationSaveOutcome>();
+	if (entries.length === 0) return outcomes;
 
-	let kind: AnnotationSaveOutcome['kind'] = 'unchanged';
 	try {
 		await vault.process(file, (data) => {
 			let text = data;
@@ -81,18 +86,17 @@ export async function saveDirtyAnnotations(
 				if (entry.pos !== null) {
 					const blockMarkdown = '```ink-canvas\n' + entry.line + '\n```\n';
 					text = insertAnnotationAfterParagraph(text, entry.pos, blockMarkdown);
-					kind = 'updated';
+					outcomes.set(entry.id, { kind: 'updated' });
 					continue;
 				}
 				const result = applyAnnotationUpdate(text, entry.id, entry.line);
 				text = result.text;
-				if (result.kind === 'updated') kind = 'updated';
-				else if (kind === 'unchanged') kind = result.kind;
+				outcomes.set(entry.id, { kind: result.kind });
 			}
 			return text;
 		});
 	} catch {
-		return { kind: 'file-missing' };
+		for (const entry of entries) outcomes.set(entry.id, { kind: 'file-missing' });
 	}
-	return { kind };
+	return outcomes;
 }

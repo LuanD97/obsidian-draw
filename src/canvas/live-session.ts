@@ -270,18 +270,29 @@ export class CanvasModeSession {
 		if (ids.length === 0) return { kind: 'unchanged' };
 
 		const entries = ids.map((id) => this.buildEntry(id));
-		const outcome = await saveDirtyAnnotations(this.deps.vault, this.deps.file, entries);
+		const outcomes = await saveDirtyAnnotations(this.deps.vault, this.deps.file, entries);
 
-		if (outcome.kind === 'updated' || outcome.kind === 'unchanged') {
-			for (const id of ids) {
+		let sawUpdate = false;
+		let sawFailure: SaveOutcome | null = null;
+		let anySucceeded = false;
+		for (const id of ids) {
+			const outcome = outcomes.get(id) ?? { kind: 'file-missing' };
+			if (outcome.kind === 'updated' || outcome.kind === 'unchanged') {
+				// Only ids that actually persisted are cleared; a not-found/
+				// duplicate/file-missing id stays dirty so it keeps retrying on
+				// the next save tick instead of silently dropping the drawing
+				// (constitution III — a polished "orphaned" notice is out of
+				// scope for this spike).
 				this.state.dirty.delete(id);
 				this.knownIds.add(id);
+				anySucceeded = true;
+				if (outcome.kind === 'updated') sawUpdate = true;
+			} else {
+				sawFailure = outcome;
 			}
-			this.loadStatic();
 		}
-		// not-found/duplicate/file-missing: dirty is left as-is so nothing is
-		// silently lost (constitution III) even though a polished "orphaned"
-		// notice is out of scope for this spike.
-		return outcome as SaveOutcome;
+		if (anySucceeded) this.loadStatic();
+		if (sawFailure) return sawFailure;
+		return { kind: sawUpdate ? 'updated' : 'unchanged' };
 	}
 }
