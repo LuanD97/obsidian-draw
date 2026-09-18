@@ -45,7 +45,7 @@ unchanged and imported directly, never copied.
 **Purpose**: Nothing new to scaffold — this feature builds inside spec 001's existing toolchain
 (package.json, tsconfig, esbuild, vitest, manifest all already exist and are shared).
 
-- [ ] T001 Create the `src/canvas/` and `tests/unit/canvas/`, `tests/dom/canvas/`,
+- [X] T001 Create the `src/canvas/` and `tests/unit/canvas/`, `tests/dom/canvas/`,
   `tests/integration/canvas/` directories (empty, so subsequent tasks have somewhere to write); confirm
   `npm run typecheck && npm test && npm run build` still pass unchanged before any new code is added
 
@@ -61,45 +61,45 @@ rendered at all.
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete.
 
-- [ ] T002 [P] Red: extend `tests/unit/document/locate.test.ts` with cases for a `fenceInfo`
+- [X] T002 [P] Red: extend `tests/unit/document/locate.test.ts` with cases for a `fenceInfo`
   parameter: `locateBlock(text, id, 'ink')` behaves exactly as before (default/back-compat);
   `locateBlock(text, id, 'ink-canvas')` finds an `ink-canvas` block and ignores same-id `ink` blocks
   in the same text, and vice versa; existing no-argument-for-fenceInfo call sites (Block Mode) keep
   compiling and passing untouched
-- [ ] T003 Green: extend `src/document/locate.ts`'s `locateBlock` with a `fenceInfo = 'ink'` parameter
+- [X] T003 Green: extend `src/document/locate.ts`'s `locateBlock` with a `fenceInfo = 'ink'` parameter
   (default preserves current behavior), replacing the hardcoded `open.info === 'ink'` check, to pass
   T002; run the full existing spec 001 suite to confirm zero regressions (contracts/canvas-annotation-format.md;
   plan.md Project Structure — "Extended module reused by both features")
-- [ ] T004 [P] Red: tests for `parseAnnotationLine`/`formatAnnotationLine` in
+- [X] T004 [P] Red: tests for `parseAnnotationLine`/`formatAnnotationLine` in
   `tests/unit/canvas/annotation-line.test.ts`: round-trip a `cv1;id=<id>;<payload>` line, including a
   payload whose first point has negative `x0`/`y0`; empty payload formats as `cv1;id=<id>;`; rejections
   (`malformed`) for a missing field, a wrong-length/charset id, invalid payload characters; `cv2;…` →
   `unsupported-version`; trailing whitespace ignored (contracts/canvas-annotation-format.md)
-- [ ] T005 Green: implement `src/canvas/annotation-line.ts` (delegates payload encode/decode to
+- [X] T005 Green: implement `src/canvas/annotation-line.ts` (delegates payload encode/decode to
   `format/codec.ts` unchanged, passing a fixed large sanity bound instead of a real width/height per
   research.md R6) to pass T004 (depends on: none — `format/codec.ts` already exists from spec 001)
-- [ ] T006 [P] Red: tests for `listAnnotationBlocks` in `tests/unit/canvas/scan.test.ts`: a note with
+- [X] T006 [P] Red: tests for `listAnnotationBlocks` in `tests/unit/canvas/scan.test.ts`: a note with
   two `ink-canvas` blocks and one `ink` block returns exactly the two `ink-canvas` refs, each with
   correct `id`, `blockStart`/`blockEnd` (fence-to-fence) and `payloadStart`/`payloadEnd`; an empty note
   returns `[]`; a malformed `ink-canvas` block is still returned as a ref (so the caller can decide to
   skip it) rather than throwing (data-model.md AnnotationBlockRef)
-- [ ] T007 Green: implement `src/canvas/scan.ts`'s `listAnnotationBlocks` (built on the extended
+- [X] T007 Green: implement `src/canvas/scan.ts`'s `listAnnotationBlocks` (built on the extended
   `document/locate.ts` scanning logic) to pass T006 (depends on T003)
-- [ ] T008 [P] [US1] Red: tests for `locateAnnotation` in `tests/unit/canvas/locate.test.ts`:
+- [X] T008 [P] [US1] Red: tests for `locateAnnotation` in `tests/unit/canvas/locate.test.ts`:
   thin-wrapper cases mirroring `locateBlock`'s `found`/`not-found`/`duplicate` variants for the
   `ink-canvas` fence language (data-model.md AnnotationLocation)
-- [ ] T009 Green: implement `src/canvas/locate.ts`'s `locateAnnotation` (calls the extended
+- [X] T009 Green: implement `src/canvas/locate.ts`'s `locateAnnotation` (calls the extended
   `locateBlock(text, id, 'ink-canvas')`) to pass T008 (depends on T003)
-- [ ] T010 [P] Red: tests for `applyAnnotationUpdate` in `tests/unit/canvas/update.test.ts`: replaces
+- [X] T010 [P] Red: tests for `applyAnnotationUpdate` in `tests/unit/canvas/update.test.ts`: replaces
   only the target annotation's payload line, byte-identical elsewhere (mirrors spec 001's
   `applyBlockUpdate` byte-preservation guarantee); `not-found`/`duplicate` leave text unchanged
-- [ ] T011 Green: implement `src/canvas/update.ts`'s `applyAnnotationUpdate` (thin wrapper over
+- [X] T011 Green: implement `src/canvas/update.ts`'s `applyAnnotationUpdate` (thin wrapper over
   `document/update.ts`'s `applyBlockUpdate`, using `locateAnnotation`) to pass T010 (depends on T009)
-- [ ] T012 [P] Red: tests for `isCanvasModeEnabled`/`setCanvasModeEnabled` in
+- [X] T012 [P] Red: tests for `isCanvasModeEnabled`/`setCanvasModeEnabled` in
   `tests/unit/canvas/frontmatter.test.ts`, against a fake frontmatter object: `true` → enabled;
   `false`/absent/any non-boolean value → disabled; setting `true` then `false` round-trips; setting the
   flag does not touch other existing keys (contracts/canvas-mode-toggle.md)
-- [ ] T013 Green: implement `src/canvas/frontmatter.ts` to pass T012 (pure function operating on a
+- [X] T013 Green: implement `src/canvas/frontmatter.ts` to pass T012 (pure function operating on a
   plain object shape compatible with Obsidian's `processFrontMatter` callback argument; the actual
   `app.fileManager.processFrontMatter` call is glue, wired in T033)
 

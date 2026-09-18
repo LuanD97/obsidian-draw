@@ -4,8 +4,13 @@ export type UpdateResult =
 	| { kind: 'updated' | 'unchanged'; text: string }
 	| { kind: 'not-found' | 'duplicate'; text: string };
 
-export function applyBlockUpdate(text: string, id: string, newLine: string): UpdateResult {
-	const loc = locateBlock(text, id);
+export function applyBlockUpdate(
+	text: string,
+	id: string,
+	newLine: string,
+	fenceInfo = 'ink',
+): UpdateResult {
+	const loc = locateBlock(text, id, fenceInfo);
 
 	if (loc.kind === 'not-found') return { kind: 'not-found', text };
 	if (loc.kind === 'duplicate') return { kind: 'duplicate', text };

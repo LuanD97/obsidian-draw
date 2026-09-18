@@ -112,3 +112,47 @@ describe('locateBlock', () => {
 		expect(text.slice(loc.start, loc.end)).toBe('v1;id=aaaaaaaa;700x260;');
 	});
 });
+
+describe('locateBlock with a fenceInfo parameter', () => {
+	function mixed(id: string): string {
+		return (
+			'```ink\n' +
+			`v1;id=${id};700x260;\n` +
+			'```\n' +
+			'\n' +
+			'```ink-canvas\n' +
+			`cv1;id=${id};XYZ\n` +
+			'```\n'
+		);
+	}
+
+	it('with no fenceInfo argument, behaves exactly as before (default/back-compat)', () => {
+		const text = `intro\n${block('aaaaaaaa')}outro\n`;
+		const loc = locateBlock(text, 'aaaaaaaa');
+		expect(loc.kind).toBe('found');
+		if (loc.kind !== 'found') throw new Error('unreachable');
+		expect(text.slice(loc.start, loc.end)).toBe('v1;id=aaaaaaaa;700x260;');
+	});
+
+	it("finds an ink-canvas block and ignores a same-id ink block when fenceInfo is 'ink-canvas'", () => {
+		const text = mixed('aaaaaaaa');
+		const loc = locateBlock(text, 'aaaaaaaa', 'ink-canvas');
+		expect(loc.kind).toBe('found');
+		if (loc.kind !== 'found') throw new Error('unreachable');
+		expect(text.slice(loc.start, loc.end)).toBe('cv1;id=aaaaaaaa;XYZ');
+	});
+
+	it("finds an ink block and ignores a same-id ink-canvas block when fenceInfo is 'ink'", () => {
+		const text = mixed('aaaaaaaa');
+		const loc = locateBlock(text, 'aaaaaaaa', 'ink');
+		expect(loc.kind).toBe('found');
+		if (loc.kind !== 'found') throw new Error('unreachable');
+		expect(text.slice(loc.start, loc.end)).toBe('v1;id=aaaaaaaa;700x260;');
+	});
+
+	it('returns not-found for an id that only exists under the other fence language', () => {
+		const text = '```ink-canvas\ncv1;id=bbbbbbbb;XYZ\n```\n';
+		expect(locateBlock(text, 'bbbbbbbb', 'ink')).toEqual({ kind: 'not-found' });
+		expect(locateBlock(text, 'zzzzzzzz', 'ink-canvas')).toEqual({ kind: 'not-found' });
+	});
+});

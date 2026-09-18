@@ -3,6 +3,20 @@ export type BlockLocation =
 	| { kind: 'not-found' }
 	| { kind: 'duplicate'; count: number };
 
+// One fenced block matching a given fence language, found by scanFencedBlocks.
+// `content` is the single candidate content line's text (prefix stripped, not
+// trimmed) so callers can parse or validate its header themselves; blockStart/
+// blockEnd span the full block (opening fence line through closing fence line,
+// or to end of file if unclosed).
+export interface FencedBlockRef {
+	blockStart: number;
+	blockEnd: number;
+	payloadStart: number;
+	payloadEnd: number;
+	prefix: string;
+	content: string;
+}
+
 interface Line {
 	start: number;
 	end: number; // excludes a trailing \r
@@ -17,7 +31,10 @@ interface FenceOpen {
 
 const PREFIX_RE = /^((?:>[ \t]?)*[ \t]{0,3})/;
 const FENCE_RE = /^(`{3,}|~{3,})(.*)$/;
-const ID_RE = /^v\d+;id=([0-9a-z]{8});/;
+// Version tag is a run of lowercase letters (e.g. "v" for ink v1, "cv" for
+// Canvas Mode's cv1) followed by digits, so this matches both fence languages'
+// headers without needing to know which one is being scanned.
+const ID_RE = /^[a-z]+\d+;id=([0-9a-z]{8});/;
 
 function splitLines(text: string): Line[] {
 	const lines: Line[] = [];
@@ -61,9 +78,9 @@ function isClosingFence(content: string, open: FenceOpen): boolean {
 	return true;
 }
 
-export function locateBlock(text: string, id: string): BlockLocation {
+export function scanFencedBlocks(text: string, fenceInfo: string): FencedBlockRef[] {
 	const lines = splitLines(text);
-	const matches: { start: number; end: number; prefix: string }[] = [];
+	const refs: FencedBlockRef[] = [];
 
 	let i = 0;
 	while (i < lines.length) {
@@ -95,18 +112,37 @@ export function locateBlock(text: string, id: string): BlockLocation {
 			j += 1;
 		}
 
-		if (open.info === 'ink' && candidates.length === 1) {
+		if (open.info === fenceInfo && candidates.length === 1) {
 			const candidate = candidates[0] as (typeof candidates)[number];
-			const idMatch = ID_RE.exec(candidate.rest);
-			if (idMatch && idMatch[1] === id) {
-				matches.push({ start: candidate.start, end: candidate.end, prefix: candidate.prefix });
-			}
+			// j points at the closing fence line when one was found, or past the
+			// end of the lines array when the fence was never closed (unclosed at
+			// EOF) — in that case the block runs to the end of the last line.
+			const blockEndLine = j < lines.length ? (lines[j] as Line) : (lines[lines.length - 1] as Line);
+			refs.push({
+				blockStart: line.start,
+				blockEnd: blockEndLine.end,
+				payloadStart: candidate.start,
+				payloadEnd: candidate.end,
+				prefix: candidate.prefix,
+				content: candidate.rest,
+			});
 		}
 
 		i = j < lines.length ? j + 1 : lines.length;
 	}
 
+	return refs;
+}
+
+export function locateBlock(text: string, id: string, fenceInfo = 'ink'): BlockLocation {
+	const refs = scanFencedBlocks(text, fenceInfo);
+	const matches = refs.filter((ref) => {
+		const idMatch = ID_RE.exec(ref.content);
+		return idMatch !== null && idMatch[1] === id;
+	});
+
 	if (matches.length === 0) return { kind: 'not-found' };
 	if (matches.length > 1) return { kind: 'duplicate', count: matches.length };
-	return { kind: 'found', ...(matches[0] as (typeof matches)[number]) };
+	const m = matches[0] as FencedBlockRef;
+	return { kind: 'found', start: m.payloadStart, end: m.payloadEnd, prefix: m.prefix };
 }
