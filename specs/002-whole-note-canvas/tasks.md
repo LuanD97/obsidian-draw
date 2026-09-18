@@ -120,35 +120,35 @@ same position relative to that paragraph (quickstart manual items 1–5).
 
 ### Tests for User Story 1 (write first, confirm they fail) ⚠️
 
-- [ ] T014 [P] [US1] Red: tests for `insertAnnotationAfterParagraph` in
+- [X] T014 [P] [US1] Red: tests for `insertAnnotationAfterParagraph` in
   `tests/unit/canvas/insert.test.ts`: given a document position anywhere inside a paragraph, inserts a
   blank line plus the new `ink-canvas` block immediately after that paragraph's end and before the next
   paragraph (or end of file); a position on the note's last paragraph appends at the end of the file; a
   position on a paragraph immediately followed by an existing `ink-canvas`/`ink` block inserts after
   that existing block, not before it; leaves all other text byte-identical; works against CRLF text
-- [ ] T015 [P] [US1] Red: tests for `layout` helpers in `tests/unit/canvas/layout.test.ts`: given a
+- [X] T015 [P] [US1] Red: tests for `layout` helpers in `tests/unit/canvas/layout.test.ts`: given a
   `.cm-scroller` width and a `.cm-content` width + left offset (as plain numbers, no DOM), compute the
   left-margin and right-margin bands available beside the content column; a scroller no wider than the
   content column yields zero-width margins on both sides (research.md R9 — feeds the "no visible
   margin" edge case, doesn't special-case it)
-- [ ] T016 [P] [US1] Red: DOM tests (happy-dom) for `src/canvas/view-plugin.ts` in
+- [X] T016 [P] [US1] Red: DOM tests (happy-dom) for `src/canvas/view-plugin.ts` in
   `tests/dom/canvas/view-plugin.test.ts`: given a doc string containing one `ink-canvas` block, the
   computed decoration set replaces exactly the block's full range (fence to fence) with a zero-size
   widget; a doc with an `ink` block only produces no decorations; recomputing after a doc change that
   moves the block's position updates the decoration range accordingly
-- [ ] T017 [P] [US1] Red: DOM tests (happy-dom) for `src/canvas/pointer-capture.ts` in
+- [X] T017 [P] [US1] Red: DOM tests (happy-dom) for `src/canvas/pointer-capture.ts` in
   `tests/dom/canvas/pointer-capture.test.ts`: a `pointerdown` with `pointerType: 'pen'` dispatched on a
   child of the capture root is intercepted (`defaultPrevented` true, injected `onPenStart` called with
   the event and local coordinates); a `pointerType: 'touch'`/`'mouse'` event is left alone
   (`defaultPrevented` false, `onPenStart` not called); reuses `classifyPointer` from
   `editor/input-filter.ts` unchanged rather than reimplementing pen detection
-- [ ] T018 [US1] Red: tests for the add-stroke path of `CanvasModeNoteState` in
+- [X] T018 [US1] Red: tests for the add-stroke path of `CanvasModeNoteState` in
   `tests/unit/canvas/session.test.ts`: starting a stroke at a point not inside any existing
   annotation's bounds creates a new `Annotation` with a fresh id and marks it dirty; a stroke that
   lands inside an existing annotation's stroke bounds appends to that annotation instead; each commit
   pushes an entry onto the session's `undoLedger` naming the touched annotation id; `dirty` tracks
   exactly the touched annotation ids
-- [ ] T019 [P] [US1] Red: integration test `tests/integration/canvas/save-new-annotation.test.ts`
+- [X] T019 [P] [US1] Red: integration test `tests/integration/canvas/save-new-annotation.test.ts`
   using the existing `FakeVault` (`tests/integration/fake-vault.ts`, reused unchanged): saving a
   brand-new annotation inserts its block right after the paragraph nearest the recorded pen-down
   position in the *current* stored text (not a stale copy read when Canvas Mode was turned on);
@@ -156,26 +156,26 @@ same position relative to that paragraph (quickstart manual items 1–5).
 
 ### Implementation for User Story 1
 
-- [ ] T020 [P] [US1] Green: implement `src/canvas/insert.ts`'s `insertAnnotationAfterParagraph` to
+- [X] T020 [P] [US1] Green: implement `src/canvas/insert.ts`'s `insertAnnotationAfterParagraph` to
   pass T014 (paragraph = a blank-line-delimited run of lines, reusing the blank-line/fence-aware line
   scanning approach already proven in `document/locate.ts`)
-- [ ] T021 [P] [US1] Green: implement `src/canvas/layout.ts`'s margin-band calculation to pass T015
+- [X] T021 [P] [US1] Green: implement `src/canvas/layout.ts`'s margin-band calculation to pass T015
   (pure arithmetic; the DOM measurement that feeds it is glue, added in T024)
-- [ ] T022 [US1] Green: implement `src/canvas/view-plugin.ts`'s decoration computation to pass T016
+- [X] T022 [US1] Green: implement `src/canvas/view-plugin.ts`'s decoration computation to pass T016
   (depends on T007 `listAnnotationBlocks`); wiring it as an actual registered CM6 `ViewPlugin` inside a
   live `EditorView` is glue, done in T033
-- [ ] T023 [US1] Green: implement `src/canvas/pointer-capture.ts`'s filter/dispatch logic to pass T017
+- [X] T023 [US1] Green: implement `src/canvas/pointer-capture.ts`'s filter/dispatch logic to pass T017
   (depends on `editor/input-filter.ts`, reused unchanged); attaching it to a real `.cm-scroller` with
   `{ capture: true, passive: false }` is glue, done in T033 (research.md R1)
-- [ ] T024 [US1] Glue: implement DOM measurement for margin geometry — read `.cm-scroller` and
+- [X] T024 [US1] Glue: implement DOM measurement for margin geometry — read `.cm-scroller` and
   `.cm-content` `getBoundingClientRect()`/computed padding and pass the numbers into
   `src/canvas/layout.ts` (no branching of its own; extends the pattern already used by
   `obsidian/column-width.ts`)
-- [ ] T025 [US1] Green: implement `CanvasModeNoteState`'s add-stroke/new-vs-existing-annotation
+- [X] T025 [US1] Green: implement `CanvasModeNoteState`'s add-stroke/new-vs-existing-annotation
   resolution and `undoLedger` bookkeeping in `src/canvas/session.ts` to pass T018 (depends on T005,
   `model/quantize.ts`'s `commitStroke` reused unchanged for point quantization, `model/erase.ts`'s
   bounding-box logic reused for "is this point inside an existing annotation")
-- [ ] T026 [US1] Green: implement the save path (new annotation → `insertAnnotationAfterParagraph` +
+- [X] T026 [US1] Green: implement the save path (new annotation → `insertAnnotationAfterParagraph` +
   `newAnnotationMarkdown`; existing annotation → `applyAnnotationUpdate`) wired through the existing
   `editor/save-queue.ts` `SaveQueue` (reused unchanged, one instance per open Canvas Mode note) to pass
   T019 (depends on T005, T009, T011, T020)

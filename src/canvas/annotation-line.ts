@@ -33,6 +33,10 @@ export function formatAnnotationLine(a: Annotation): string {
 	return `cv1;id=${a.id};${encodePayload(shiftStrokes(a.strokes, SHIFT))}`;
 }
 
+export function newAnnotationMarkdown(a: Annotation): string {
+	return '```ink-canvas\n' + formatAnnotationLine(a) + '\n```\n';
+}
+
 export function parseAnnotationLine(line: string): Annotation {
 	const trimmed = line.replace(/\s+$/, '');
 	const match = LINE_RE.exec(trimmed);

@@ -27,14 +27,14 @@ export const internal = {
 	},
 };
 
-interface BoundingBox {
+export interface BoundingBox {
 	minX: number;
 	minY: number;
 	maxX: number;
 	maxY: number;
 }
 
-function boundingBox(stroke: Stroke): BoundingBox {
+export function boundingBox(stroke: Stroke): BoundingBox {
 	let minX = Infinity;
 	let minY = Infinity;
 	let maxX = -Infinity;
