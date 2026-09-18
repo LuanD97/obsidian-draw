@@ -64,7 +64,8 @@ The in-memory state for one note currently open with Canvas Mode active (`src/ca
 |-------|------|-------|
 | `file` | Obsidian file object (`TFile`) | Same rationale as spec 001's `EditingSession.file`: Obsidian keeps this current across renames |
 | `annotations` | `Map<id, Annotation>` | Loaded from `scan.ts` on open; kept in sync as strokes are added |
-| `history` | `Command[]` (undo) / `Command[]` (redo) | Reuses spec 001's `model/history.ts` shape, each `Command` additionally carries `annotationId` (research.md R10) |
+| `histories` | `Map<id, History>` | One spec 001 `model/history.ts` `History` instance per annotation, reused unchanged |
+| `undoLedger` | `id[]` (chronological) | Session-level ordering across annotations: which annotation's `History` to call next on a session-wide Undo/Redo (research.md R10) |
 | `dirty` | `Set<id>` | Annotation ids with unsaved changes, drained by the save queue |
 
 ### Save flow per annotation

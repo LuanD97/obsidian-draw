@@ -144,11 +144,17 @@ it happens, the same way spec 001's R5 recorded RDP simplification failing on-de
 
 ## R10. Undo/erase scope
 
-- **Decision**: One undo/redo history per open Canvas Mode session (not per annotation), reusing
-  spec 001's `model/history.ts` `Command` shape extended with an `annotationId` field per command, so
-  undoing an `add` or `erase` command re-targets whichever annotation it touched. Erase hit-testing
-  reuses `model/erase.ts` unchanged, scoped to the annotation whose strokes the eraser gesture
-  overlaps.
-- **Rationale**: FR-009 only asks for parity with Block Mode's undo/eraser behavior, not
-  cross-annotation semantics beyond that; a single chronological stack is the simplest design that
-  meets it (Principle V) and reuses tested code.
+- **Decision**: Reuse spec 001's `model/history.ts` `History` class and `Command` type completely
+  unchanged, one `History` instance per annotation (each annotation is treated as a `Drawing`-shaped
+  value for history purposes, with `width`/`height` unused zeros since Canvas Mode never resizes).
+  Session-wide undo/redo ordering across annotations is a thin, separate ledger in
+  `src/canvas/session.ts`: a chronological list of annotation ids, one entry per applied command,
+  telling session-level "Undo" which per-annotation `History` to call next. Erase hit-testing reuses
+  `model/erase.ts` unchanged, scoped to whichever annotation's strokes the eraser gesture overlaps.
+- **Rationale**: `History.apply`/`undo`/`redo` are written against a single `Drawing`'s state, not a
+  collection — bolting a multi-entity concept onto that class would mean either changing its public
+  shape (churn for Block Mode's already-tested, working code) or duplicating it. Wrapping it per
+  annotation and keeping the cross-annotation ordering as a separate, new piece of session state
+  reuses the tested class byte-for-byte and keeps the new piece (the ledger) small enough to unit
+  test directly. FR-009 only asks for parity with Block Mode's undo/eraser behavior, not any
+  specific cross-annotation semantics beyond "the last thing done is the first thing undone."
