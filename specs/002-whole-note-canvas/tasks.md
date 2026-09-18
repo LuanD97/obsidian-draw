@@ -285,7 +285,7 @@ cannot offer (plan.md Summary) — its result is the strongest single input to t
   "Turn note into canvas" interfered in any way (FR-001a)
 - [X] T042 Full gate: `npm run typecheck && npm test && npm run build`, all green, on the final state
   of all three user stories together
-- [ ] T043 Write the `## Go/No-Go Recommendation` section in quickstart.md (or a sibling
+- [X] T043 Write the `## Go/No-Go Recommendation` section in quickstart.md (or a sibling
   `recommendation.md`) per its "Concluding the spike" instructions: which stories felt natural, which
   research.md items were confirmed vs. revised on-device (update research.md itself for any revision,
   following the precedent of spec 001's R5), and the edge-case outcome table required by SC-002
