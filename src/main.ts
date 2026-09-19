@@ -88,10 +88,20 @@ export default class DrawPlugin extends Plugin {
 		const file = view.file;
 		if (!file) return;
 		const currentlyEnabled = isCanvasModeEnabled(this.app.metadataCache.getFileCache(file)?.frontmatter);
+		const nextEnabled = !currentlyEnabled;
 		await this.app.fileManager.processFrontMatter(file, (fm) => {
-			setCanvasModeEnabled(fm, !currentlyEnabled);
+			setCanvasModeEnabled(fm, nextEnabled);
 		});
-		this.syncCanvasSession();
+		// Acts on the state just written, not by re-reading metadataCache:
+		// processFrontMatter's promise resolving doesn't guarantee the cache
+		// has already been re-parsed, so an immediate syncCanvasSession() here
+		// could still see the pre-toggle frontmatter and skip activation
+		// until the next unrelated active-leaf-change/file-open event.
+		if (nextEnabled) {
+			this.activateCanvasSession(view, file);
+		} else {
+			this.deactivateCanvasSession();
+		}
 	}
 
 	// Activates/deactivates the live Canvas Mode surface to match whichever
@@ -114,9 +124,15 @@ export default class DrawPlugin extends Plugin {
 
 	private activateCanvasSession(view: MarkdownView, file: TFile): void {
 		const editorView = this.getEditorView(view);
-		if (!editorView) return;
+		if (!editorView) {
+			new Notice("Canvas Mode couldn't attach to this editor (unexpected Obsidian internals)");
+			return;
+		}
 		const plugin = getCanvasSession(editorView);
-		if (!plugin) return;
+		if (!plugin) {
+			new Notice("Canvas Mode couldn't find its editor extension — try reloading Obsidian");
+			return;
+		}
 
 		plugin.session = new CanvasModeSession({
 			view: editorView,
