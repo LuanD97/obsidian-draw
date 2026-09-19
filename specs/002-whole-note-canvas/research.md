@@ -5,13 +5,13 @@ this exploration exists to test on-device; a negative on-device result there is 
 finding for the go/no-go recommendation (FR-011), not a plan failure — record it in this file when
 it happens, the same way spec 001's R5 recorded RDP simplification failing on-device.
 
-## R1. Capturing pen input across the whole note (spike-validated)
+## R1. Capturing pen input across the whole note (spike-validated — revised on-device)
 
-- **Decision**: Attach a single `pointerdown` listener to `.cm-scroller` with `{ capture: true,
-  passive: false }`. On pen contact (`classifyPointer(event) === 'pen'`, reusing spec 001's
-  `editor/input-filter.ts` unchanged), call `preventDefault()` and route the stroke to the overlay;
-  otherwise let the event continue unmodified so touch/mouse scrolling, selection, and cursor
-  placement behave exactly as before Canvas Mode existed.
+- **Decision**: Attach a single `pointerdown`/`pointermove`/`pointerup`/`pointercancel` listener to
+  `.cm-scroller` with `{ capture: true, passive: false }`. On pen contact (`classifyPointer(event)
+  === 'pen'`, reusing spec 001's `editor/input-filter.ts` unchanged), call `preventDefault()` and
+  route the stroke to the overlay; otherwise let the event continue unmodified so touch/mouse
+  scrolling, selection, and cursor placement behave exactly as before Canvas Mode existed.
 - **Rationale**: This is the only interception point that sees every pen contact over both margins
   and text before Obsidian's own editor handlers act on it, without needing a pointer-events trick
   that would also have to distinguish pen from touch at the CSS layer (CSS cannot do that). Reusing
@@ -22,10 +22,22 @@ it happens, the same way spec 001's R5 recorded RDP simplification failing on-de
   scroll or place the cursor with a finger while Canvas Mode is on) unless it re-dispatches non-pen
   events to the element underneath, which is more fragile than not intercepting them in the first
   place.
-- **Risk**: Obsidian/CodeMirror may itself call `preventDefault()` or `stopPropagation()` on pen
-  pointerdown before a capturing-phase listener sees it in some CM6 versions. Verify with the
-  Timelines panel in Safari Web Inspector; this is the first item to check on-device (quickstart
-  item 1).
+- **Risk, confirmed on-device and fixed**: CM6/Obsidian did **not** pre-empt the pointerdown itself —
+  the original risk as written didn't materialize. What actually happened instead: on the first
+  on-device pass, the Pencil scrolled the note instead of drawing (no ink appeared at all). WebKit's
+  compositor can commit to a `touch-action`-driven pan before a `pointerdown`'s `preventDefault()` is
+  seen to matter, and `preventDefault()` on the pointer events alone — the only thing implemented
+  pre-device-testing — was not enough to stop it, matching the exact caveat already on record in
+  `CLAUDE.md`'s "Touch defaults" section (`preventDefault()` on `touchstart`, not just on the pointer
+  events). Since `.cm-scroller` must keep panning for finger touch (unlike Block Mode's dedicated
+  drawing panel, which sets `touch-action: none` unconditionally), the fix additionally listens for
+  `touchstart` and toggles `touch-action: none` on the scroller **only for the duration of a stylus
+  contact**, detected via WebKit's non-standard `Touch.touchType` (`'stylus'` vs `'direct'`) since
+  neither CSS nor `pointerType` alone can make that distinction up front; it's restored on
+  `touchend`/`touchcancel`/deactivation. See `src/canvas/pointer-capture.ts`. Once this was in place,
+  Pencil input was confirmed captured and ink appeared on-device — R1's core bet (a capturing-phase
+  listener on `.cm-scroller` is a viable interception point at all) is **confirmed**; the
+  `touch-action` toggle was the missing piece, not a change to the interception point itself.
 
 ## R2. Overlay placement and scroll sync (spike-validated)
 
@@ -158,3 +170,42 @@ it happens, the same way spec 001's R5 recorded RDP simplification failing on-de
   reuses the tested class byte-for-byte and keeps the new piece (the ledger) small enough to unit
   test directly. FR-009 only asks for parity with Block Mode's undo/eraser behavior, not any
   specific cross-annotation semantics beyond "the last thing done is the first thing undone."
+
+## R11. Activation glue: two on-device-only bugs found in `main.ts`/`live-session.ts`
+
+Neither of these was predicted pre-implementation; both were found from real on-device reports
+during the first round of manual testing, not from the automated suite (both are exactly the kind of
+undocumented-Obsidian/CM6-internals risk that glue code, by nature, can't be unit-tested against —
+constitution v1.1.0's glue exemption). Recorded here, not just as commit messages, so a future agent
+doesn't have to rediscover them.
+
+- **Frontmatter toggle race (fixed)**: `toggleCanvasMode` originally wrote `canvas-mode` via
+  `app.fileManager.processFrontMatter`, then immediately called `syncCanvasSession()`, which decides
+  whether to activate by re-reading `app.metadataCache.getFileCache(file)?.frontmatter`.
+  `processFrontMatter`'s returned promise does not guarantee the metadata cache has already been
+  re-parsed by the time it resolves, so that immediate re-read could still observe the *pre-toggle*
+  value and skip activation — the frontmatter property showed as ticked (the write itself succeeded),
+  but no session, and therefore no pointer capture, was ever created. Nothing re-triggered activation
+  until an unrelated `active-leaf-change`/`file-open` fired later with the by-then-updated cache
+  (e.g. switching notes away and back), which is why the failure looked intermittent rather than
+  reliably reproducible. **Fix**: `toggleCanvasMode` now activates/deactivates directly from the
+  boolean it just wrote, never round-tripping through the cache for its own toggle.
+- **`insertBefore` DOM-structure crash (fixed)**: `CanvasModeSession`'s constructor originally called
+  `view.scrollDOM.insertBefore(overlayEl, view.contentDOM)`, assuming `contentDOM` is always a
+  *direct* child of `scrollDOM`. That assumption didn't hold on the test device/Obsidian version and
+  threw a `DOMException`, uncaught, from inside `activateCanvasSession` — reachable from
+  `workspace.onLayoutReady()` at startup for any note left with `canvas-mode: true`, which turned
+  "toggle it on" into a **plugin-failed-to-load crash loop on every subsequent launch** (the
+  frontmatter stayed `true`, so every restart hit the same crash). **Fix**: `overlayEl` is appended
+  to `scrollDOM` directly instead (`position: absolute` + `z-index` don't depend on sibling order),
+  and every reachable boundary (`main.ts`'s activate/deactivate, and `CanvasLivePluginInstance`'s
+  `update`/`destroy`, which CM6 calls directly as part of its own render/teardown cycle) now catches
+  and logs/notifies instead of letting an exception propagate — so a *future* undocumented-internals
+  surprise degrades to "Canvas Mode doesn't start for this note" instead of crashing the plugin or
+  the editor again.
+- **Takeaway for future glue work in this area**: `editor.cm`, CM6's exact internal DOM shape, and
+  Obsidian's metadata-cache update timing are all undocumented/unspecified behavior this plugin
+  depends on. Every one of the three confirmed-on-device bugs so far (this section plus R1's
+  `touch-action` finding) came from exactly that category, not from the pure/tested modules. Any new
+  code touching these should assume the same and fail closed (try/catch, no data-handling decisions,
+  visible `Notice`/console output) rather than assume the happy path.

@@ -3,11 +3,27 @@
 An Obsidian plugin for handwriting with Apple Pencil on iPad, where the drawings are
 stored **inline in the note's `.md` file** rather than as separate `.svg`/drawing files.
 
-Status: the v1 feature is fully specified but not implemented yet. Everything lives in
+Status: **spec 001 (Block Mode — "Insert handwriting block") is implemented and working.** It lives in
 `specs/001-inline-handwriting-blocks/` (spec, plan, research, data model, contracts, quickstart,
-tasks) on branch `001-inline-handwriting-blocks`. Implement by following `tasks.md` in order.
-Project rules are in `.specify/memory/constitution.md` (v1.1.0): test-first for all logic,
-with thin glue exempt. Where these notes and the spec differ, the spec and constitution win.
+tasks) on branch `001-inline-handwriting-blocks`.
+
+**Spec 002 (Canvas Mode — "Turn note into canvas") is a feasibility spike, implementation complete,
+on-device validation in progress** on branch `002-whole-note-canvas`
+(`specs/002-whole-note-canvas/`). Canvas Mode lets the user draw anywhere over a note's rendered Live
+Preview (margins and typed text alike), anchored to the nearest paragraph, instead of Block Mode's
+explicit fixed-size blocks — see that spec's `spec.md`/`plan.md` for the full design and
+`quickstart.md`'s "Go/No-Go Recommendation" for current on-device status. **Read
+`specs/002-whole-note-canvas/research.md`'s R1/R11 before touching `src/canvas/live-session.ts`,
+`src/canvas/pointer-capture.ts`, or `src/main.ts`'s Canvas Mode wiring** — three real bugs were
+already found and fixed there purely from on-device reports (a WebKit `touch-action`/pen-vs-touch
+scrolling conflict, an Obsidian metadata-cache race on the frontmatter toggle, and a `.cm-content`
+DOM-structure assumption that crashed the whole plugin on startup), and that section explains why
+each one wasn't and couldn't have been caught by the automated test suite.
+
+Both specs follow `.specify/memory/constitution.md` (v1.1.0): test-first for all logic, with thin
+glue (registering commands/extensions, DOM measurement, wiring Obsidian/CM6 objects into tested
+functions) exempt but covered by each spec's manual on-device checklist instead. Where these notes
+and a spec differ, the spec and constitution win.
 
 ## Why this exists
 
@@ -112,8 +128,11 @@ v1;id=k3f9x2ab;700x260;<base64 of compressed, delta-encoded strokes>
 
 ## Suggested next steps
 
-For v1, steps 1–5 are superseded by `specs/001-inline-handwriting-blocks/tasks.md`. The
-"Later / optional" items remain future work.
+For spec 001 (v1, Block Mode), steps 1–5 were superseded by
+`specs/001-inline-handwriting-blocks/tasks.md` and are now done. **Spec 002 (Canvas Mode)** is the
+realization of the "Inline editing mode" idea below, tracked separately in
+`specs/002-whole-note-canvas/`; see its `tasks.md` and `quickstart.md`'s Go/No-Go section for what's
+left (on-device checklist items 2–12 as of this writing).
 
 1. Scaffold the plugin: manifest, esbuild config, `main.ts` with the code block
    processor and the insert command.
@@ -123,6 +142,6 @@ For v1, steps 1–5 are superseded by `specs/001-inline-handwriting-blocks/tasks
 4. Implement save-back through `vault.process` plus id lookup; test with concurrent edits.
 5. Test on the iPad through Safari Web Inspector.
 6. Later / optional:
-   - Inline editing mode.
+   - Inline editing mode. → now spec 002 (Canvas Mode), in progress.
    - An "export block to SVG" command.
    - A migration command that converts existing Ink drawings to inline blocks.

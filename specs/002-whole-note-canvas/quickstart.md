@@ -77,12 +77,41 @@ were confirmed vs. revised on-device, and the edge-case outcome table required b
 
 ## Go/No-Go Recommendation
 
-**Status: implementation complete, on-device validation not yet run.** This section covers what
-`/speckit-implement` was able to verify (typecheck, automated tests, production build) in an
-environment with no iPad and no Safari Web Inspector attached, and is explicit about what it could
-not verify. **The manual iPad checklist above (items 1–12) is still required before a real go/no-go
-call can be made** — do not treat this section as satisfying FR-011 on its own; treat it as the
-automated half of that requirement, with the on-device half still outstanding.
+**Status: implementation complete; on-device validation in progress, not finished.** `/speckit-implement`
+verified typecheck/automated tests/build in an environment with no iPad and no Safari Web Inspector
+attached; a first round of real on-device testing has since happened (via the user, relayed back
+through chat rather than Safari Web Inspector directly), found and fixed three real bugs, and
+confirmed the core drawing mechanism works. **The manual iPad checklist above (items 1–12) is still
+only partially run** — do not treat this section as satisfying FR-011 on its own yet; several items
+below are still open, most importantly reflow (item 5), reopening after a save (item 4), and US2/US3
+(items 6–7).
+
+### On-device findings so far (this round)
+
+Three bugs were found and fixed purely from user reports in chat (no direct console/Web Inspector
+access this round — see research.md R1/R11 for full detail):
+
+1. **Pencil scrolled the note instead of drawing, no ink appeared.** Fixed: `pointer-capture.ts` now
+   also toggles `touch-action: none` on `.cm-scroller` for the duration of a stylus contact
+   (detected via WebKit's `Touch.touchType`), restoring it on touch end — `preventDefault()` on the
+   pointer events alone (the pre-device-testing implementation) was not enough to stop WebKit's
+   compositor-driven pan. **Confirmed fixed**: the user reported ink now appears when drawing.
+2. **Toggling Canvas Mode on didn't activate it** (frontmatter showed `canvas-mode: true`, ticked,
+   but nothing was captured) until switching notes away and back. Fixed: activation now acts on the
+   boolean just written to frontmatter instead of re-reading `metadataCache` immediately afterward,
+   which doesn't reliably reflect the write yet at that exact moment.
+3. **Plugin failed to load** (a crash loop on every subsequent Obsidian launch, since `canvas-mode:
+   true` stayed set on the note and startup re-activation hit the same crash every time). Fixed: the
+   overlay DOM insertion no longer assumes `.cm-content` is a direct child of `.cm-scroller`
+   (`insertBefore` → `appendChild`), and every activation boundary now catches and logs/notifies
+   instead of throwing.
+
+None of these three were predicted before implementation, and none could have been found without a
+real device — exactly the category of risk this spike exists to surface (R1 was right to flag this
+area as the highest-risk, device-only bet, even though the *specific* failure mode differed from what
+was anticipated).
+
+### What was verified automatically
 
 ### What was verified automatically
 
@@ -107,34 +136,39 @@ automated half of that requirement, with the on-device half still outstanding.
   debounced tick, silently dropping the failed one from future retries. It now returns a per-id
   outcome map instead, and only ids that actually persisted are cleared from `dirty`.
 
-### What could not be verified (no device available)
+### What's now confirmed vs. still open on-device
 
-The CM6 `ViewPlugin`/pointer-capture wiring, the live overlay (`src/canvas/live-session.ts`), and
-`main.ts`'s activation glue are, by design (constitution v1.1.0's glue exemption, plan.md's Technical
-Context), not unit-testable — they depend on a real CM6 `EditorView`, real Pencil input, and real
-iPad rendering/scroll behaviour. None of quickstart items 1–12 were run. In particular:
-
-- **R1 (pointer capture not pre-empted)** and **R2 (overlay scroll sync)** — flagged in research.md
-  as "the highest-risk, device-only bets in this whole spike" — are unconfirmed. The implementation
-  attaches a capturing-phase listener to `EditorView.scrollDOM` and positions the overlay as a
-  sibling of `EditorView.contentDOM` sized to its scrollable area, per R1/R2's decisions, but whether
-  Obsidian/CM6 pre-empts the pointerdown before it, and whether the overlay's JS-driven resize
-  actually keeps pace with reflow, is exactly the kind of thing this spike exists to test on-device.
+- **Quickstart item 1 (pointer capture) — confirmed working**, after the `touch-action` fix above.
+  Drawing with the Pencil is captured and ink renders live on the overlay.
+- **R1 (pointer capture is a viable interception point at all) — confirmed.** The *specific* risk as
+  originally written (CM6/Obsidian pre-empting the pointerdown itself) did not materialize; the real
+  blocker was WebKit's `touch-action` handling, now fixed (research.md R1).
+- **R2 (overlay scroll sync), quickstart items 2–7, 9 — still unconfirmed.** Only "does a stroke
+  appear where drawn" has been checked so far, in a single note, in one sitting. Not yet checked:
+  scrolling after drawing (item 2), the raw block staying hidden (item 3), reopening the note after a
+  save actually reflows the stroke correctly (item 4 fully — the anchor-resolution path in
+  `saveDirtyAnnotations`/`live-session.ts` has not been exercised end-to-end on a real reload), text
+  reflow keeping the annotation with its paragraph (item 5), marking up existing typed text (item 6,
+  US2), a spanning stroke from margin to text (item 7, US3), and the deleted-paragraph on-device
+  behavior (item 9).
 - **R4 (hiding raw block source)**: the decoration logic is unit-tested (`computeAnnotationDecorations`
   builds a real `@codemirror/state` `DecorationSet`), but its interaction with Obsidian's own Live
-  Preview decorations, and what happens when a cursor lands inside the hidden range, is unverified.
+  Preview decorations, and what happens when a cursor lands inside the hidden range, is unverified
+  (item 3).
 - **Anchor precision**: for a brand-new annotation, the stored anchor is `coordsAtPos` of where
   `findInsertionPoint` says the block *will* be inserted, evaluated against the pre-insertion
   document — this is a deliberate approximation (documented in `src/canvas/live-session.ts`), not a
   guarantee that a stroke re-renders at the exact pixel it was drawn at, especially for a multi-line
-  paragraph. Whether this reads as "close enough" or "visibly jumps" is an on-device judgement call.
-- Quickstart items 8 (erase/undo), 9 (deleted paragraph, on-device), 10 (no visible margin), 11
-  (Block Mode coexistence), and 12 (plugin-absent degradation) are all unrun.
+  paragraph. Whether this reads as "close enough" or "visibly jumps" is an on-device judgement call
+  that needs a reload to check (item 4) — not yet done.
+- Quickstart items 8 (erase/undo), 10 (no visible margin), 11 (Block Mode coexistence), and 12
+  (plugin-absent degradation) are all still unrun.
 
 ### Edge-case outcome table (SC-002)
 
 | Edge case | Automated result | On-device result |
 |---|---|---|
+| Pointer capture / basic drawing (item 1) | N/A — glue, not unit-testable | **Confirmed working**, after the `touch-action` fix |
 | Paragraph deleted | File uncorrupted, block updates in place, effectively reattaches to whatever now precedes it (T039) | Not run |
 | Duplicate annotation id | Save refused, both copies kept, file unchanged (T039, both direct and batched paths) | Not run |
 | No visible margin (split-screen) | N/A — needs real layout | Not run |
@@ -143,11 +177,14 @@ iPad rendering/scroll behaviour. None of quickstart items 1–12 were run. In pa
 
 ### Recommendation
 
-Proceed to the on-device checklist before deciding go/no-go. The mechanism is coherent and the
-hardest part to get wrong by construction — file integrity — is solid: every save path is
-test-covered, and the newly-fixed duplicate-id bug shows that coverage catching a real defect before
-it reached a device. What remains unknown is entirely in the category the spike was designed to
-surface (R1/R2's device-only bets), so **this is not a "ship it" recommendation and not a "kill it"
-recommendation — it's "run the checklist next."** If R1 or R2 fail outright on-device, that alone is
-enough to answer the go/no-go question per plan.md's Implementation Strategy, before spending more
-time on polish.
+Continue the on-device checklist before deciding go/no-go — **do not stop at "ink appears," that's
+only item 1 of 12.** The mechanism is coherent, the highest-priority risk (Pencil input actually
+reaching the drawing surface at all) is now confirmed, and file integrity — the hardest part to get
+wrong by construction — is solid and test-covered (the newly-fixed duplicate-id bug shows that
+coverage catching a real defect before it reached a device). But three real, unpredicted bugs came
+out of a single round of on-device testing on the *first* checklist item alone (research.md R11);
+that is itself evidence this category of risk is real and not yet exhausted. **The next concrete
+step is quickstart items 2–7 and 9** (in particular: close the note and reopen it to check the
+stroke re-renders in the same place — item 4 — since that's the first real exercise of the
+anchor-resolution/save round-trip together, which has only been unit-tested in isolation so far).
+This is still not a "ship it" or "kill it" call — it's "keep running the checklist, in order."

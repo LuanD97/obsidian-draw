@@ -193,7 +193,11 @@ same position relative to that paragraph (quickstart manual items 1–5).
 - [ ] T030 [US1] Gate: `npm run typecheck && npm test && npm run build`; then `npm run deploy` and run
   quickstart manual items 1–5 on the iPad. Record results, including the research.md R1/R2/R4 risk
   items explicitly (pointer capture not pre-empted, overlay tracks scroll, raw block stays hidden) —
-  a failure here is a valid spike finding to record in research.md, not necessarily a blocker to fix
+  a failure here is a valid spike finding to record in research.md, not necessarily a blocker to fix.
+  **Partial progress**: automated gate passes; on-device item 1 (pointer capture) is confirmed
+  working after fixing a `touch-action` gap, a frontmatter-toggle race, and an `insertBefore`
+  DOM-structure crash (all three found on-device and fixed — see research.md R1/R11 and quickstart.md's
+  Go/No-Go section for detail). Items 2–5 still need to be run before this task is checked off.
 
 **Checkpoint**: Margin annotations can be drawn, saved inline, and reflow correctly with their
 paragraph. This alone is enough to judge the core value proposition (SC-001).
