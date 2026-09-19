@@ -122,33 +122,49 @@ export default class DrawPlugin extends Plugin {
 		}
 	}
 
+	// Never lets a failure here escape uncaught: this can run during
+	// onLayoutReady (startup, for a restored canvas-mode note) or from a
+	// workspace event handler, and an uncaught exception in either would
+	// otherwise surface as "plugin failed to load" or a broken workspace —
+	// far worse than Canvas Mode simply not activating for one note.
 	private activateCanvasSession(view: MarkdownView, file: TFile): void {
-		const editorView = this.getEditorView(view);
-		if (!editorView) {
-			new Notice("Canvas Mode couldn't attach to this editor (unexpected Obsidian internals)");
-			return;
-		}
-		const plugin = getCanvasSession(editorView);
-		if (!plugin) {
-			new Notice("Canvas Mode couldn't find its editor extension — try reloading Obsidian");
-			return;
-		}
+		try {
+			const editorView = this.getEditorView(view);
+			if (!editorView) {
+				new Notice("Canvas Mode couldn't attach to this editor (unexpected Obsidian internals)");
+				return;
+			}
+			const plugin = getCanvasSession(editorView);
+			if (!plugin) {
+				new Notice("Canvas Mode couldn't find its editor extension — try reloading Obsidian");
+				return;
+			}
 
-		plugin.session = new CanvasModeSession({
-			view: editorView,
-			file: file as TFileLike,
-			vault: { process: (f, fn) => this.app.vault.process(f as unknown as TFile, fn) },
-			getStrokeColor: () => getComputedStyle(document.body).getPropertyValue('--text-normal').trim(),
-			dpr: window.devicePixelRatio,
-		});
-		this.activeCanvasFile = file;
-		this.activeCanvasPlugin = plugin;
+			plugin.session = new CanvasModeSession({
+				view: editorView,
+				file: file as TFileLike,
+				vault: { process: (f, fn) => this.app.vault.process(f as unknown as TFile, fn) },
+				getStrokeColor: () => getComputedStyle(document.body).getPropertyValue('--text-normal').trim(),
+				dpr: window.devicePixelRatio,
+			});
+			this.activeCanvasFile = file;
+			this.activeCanvasPlugin = plugin;
+		} catch (e) {
+			console.error('Canvas Mode: failed to activate', e);
+			new Notice("Canvas Mode failed to start for this note — see console for details");
+		}
 	}
 
 	private deactivateCanvasSession(): void {
-		if (this.activeCanvasPlugin?.session) {
-			void this.activeCanvasPlugin.session.destroy();
-			this.activeCanvasPlugin.session = null;
+		try {
+			if (this.activeCanvasPlugin?.session) {
+				void this.activeCanvasPlugin.session.destroy().catch((e: unknown) => {
+					console.error('Canvas Mode: failed to tear down cleanly', e);
+				});
+				this.activeCanvasPlugin.session = null;
+			}
+		} catch (e) {
+			console.error('Canvas Mode: failed to tear down cleanly', e);
 		}
 		this.activeCanvasPlugin = null;
 		this.activeCanvasFile = null;

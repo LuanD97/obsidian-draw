@@ -70,7 +70,12 @@ export class CanvasModeSession {
 
 		this.overlayEl = doc.createElement('div');
 		this.overlayEl.className = 'canvas-mode-overlay';
-		view.scrollDOM.insertBefore(this.overlayEl, view.contentDOM);
+		// Appended, not inserted right before contentDOM: position: absolute +
+		// z-index (styles.css) don't depend on DOM sibling order for either
+		// positioning or stacking, and insertBefore would throw if contentDOM
+		// ever isn't a *direct* child of scrollDOM (an internal CM6/Obsidian
+		// DOM-structure assumption not worth depending on here).
+		view.scrollDOM.appendChild(this.overlayEl);
 
 		this.canvas = doc.createElement('canvas');
 		this.canvas.className = 'canvas-mode-surface';
