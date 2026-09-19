@@ -28,6 +28,22 @@ function dispatchPointer(
 	return event;
 }
 
+function dispatchTouch(
+	target: HTMLElement,
+	type: string,
+	touchType: 'stylus' | 'direct' | undefined,
+): TouchEvent {
+	const touch = touchType === undefined ? [] : [{ touchType, clientX: 10, clientY: 20 }];
+	const event = new TouchEvent(type, {
+		bubbles: true,
+		cancelable: true,
+		touches: touch as unknown as Touch[],
+		changedTouches: touch as unknown as Touch[],
+	});
+	target.dispatchEvent(event);
+	return event;
+}
+
 function noopHandlers(): {
 	onPenStart: ReturnType<typeof vi.fn<(e: PointerEvent, local: { x: number; y: number }) => void>>;
 	onPenMove: ReturnType<typeof vi.fn<(e: PointerEvent, local: { x: number; y: number }) => void>>;
@@ -113,6 +129,58 @@ describe('attachPointerCapture', () => {
 
 		expect(event.defaultPrevented).toBe(true);
 		expect(handlers.onPenStart).toHaveBeenCalledTimes(1);
+	});
+
+	it('sets touch-action: none on the root and prevents default for a stylus (Apple Pencil) touchstart', () => {
+		// research.md R1 / CLAUDE.md "Touch defaults": WebKit can start a native
+		// pan from touch-action before a pointerdown's preventDefault() takes
+		// effect, so a stylus touchstart additionally forces touch-action:none
+		// for the contact's duration — detected via WebKit's touchType
+		// extension so finger touches are left alone (CSS alone can't tell
+		// pen from touch — research.md R1's "Alternatives considered").
+		const { root, child } = makeRootWithChild();
+		attachPointerCapture(root, noopHandlers());
+
+		const event = dispatchTouch(child, 'touchstart', 'stylus');
+
+		expect(event.defaultPrevented).toBe(true);
+		expect(root.style.touchAction).toBe('none');
+	});
+
+	it('leaves touch-action alone and does not prevent default for a finger (direct) touchstart', () => {
+		const { root, child } = makeRootWithChild();
+		attachPointerCapture(root, noopHandlers());
+
+		const event = dispatchTouch(child, 'touchstart', 'direct');
+
+		expect(event.defaultPrevented).toBe(false);
+		expect(root.style.touchAction).toBe('');
+	});
+
+	it('restores touch-action after the stylus contact ends', () => {
+		const { root, child } = makeRootWithChild();
+		attachPointerCapture(root, noopHandlers());
+
+		dispatchTouch(child, 'touchstart', 'stylus');
+		expect(root.style.touchAction).toBe('none');
+
+		dispatchTouch(child, 'touchend', undefined);
+		expect(root.style.touchAction).toBe('');
+	});
+
+	it('restores touch-action after the returned detach function is called', () => {
+		const { root, child } = makeRootWithChild();
+		const detach = attachPointerCapture(root, noopHandlers());
+
+		dispatchTouch(child, 'touchstart', 'stylus');
+		expect(root.style.touchAction).toBe('none');
+
+		detach();
+		expect(root.style.touchAction).toBe('');
+
+		const event = dispatchTouch(child, 'touchstart', 'stylus');
+		expect(event.defaultPrevented).toBe(false);
+		expect(root.style.touchAction).toBe('');
 	});
 
 	it('stops intercepting after the returned detach function is called', () => {
