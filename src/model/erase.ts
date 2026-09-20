@@ -48,6 +48,29 @@ export function boundingBox(stroke: Stroke): BoundingBox {
 	return { minX, minY, maxX, maxY };
 }
 
+// The union of every stroke's own bounding box, or null for an empty list —
+// shared by erase hit-testing (per-annotation) and Canvas Mode's viewport
+// culling (per-annotation, before the more expensive outline generation).
+export function strokesBoundingBox(strokes: Stroke[]): BoundingBox | null {
+	if (strokes.length === 0) return null;
+	let minX = Infinity;
+	let minY = Infinity;
+	let maxX = -Infinity;
+	let maxY = -Infinity;
+	for (const stroke of strokes) {
+		const box = boundingBox(stroke);
+		minX = Math.min(minX, box.minX);
+		minY = Math.min(minY, box.minY);
+		maxX = Math.max(maxX, box.maxX);
+		maxY = Math.max(maxY, box.maxY);
+	}
+	return { minX, minY, maxX, maxY };
+}
+
+export function boxesIntersect(a: BoundingBox, b: BoundingBox): boolean {
+	return a.minX <= b.maxX && a.maxX >= b.minX && a.minY <= b.maxY && a.maxY >= b.minY;
+}
+
 function strokeHit(stroke: Stroke, at: { x: number; y: number }, threshold: number): boolean {
 	const box = boundingBox(stroke);
 	if (

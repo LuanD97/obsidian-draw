@@ -1,5 +1,5 @@
 import { commitStroke } from '../model/quantize';
-import { boundingBox } from '../model/erase';
+import { strokesBoundingBox } from '../model/erase';
 import { History } from '../model/history';
 import { generateId } from '../format/id';
 import type { Drawing, RawPoint, Stroke } from '../model/types';
@@ -24,19 +24,9 @@ function fromDrawing(d: Drawing): Annotation {
 // bounding boxes (model/erase.ts's boundingBox logic, reused unchanged, per
 // research.md R10).
 function containsPoint(strokes: Stroke[], at: { x: number; y: number }): boolean {
-	if (strokes.length === 0) return false;
-	let minX = Infinity;
-	let minY = Infinity;
-	let maxX = -Infinity;
-	let maxY = -Infinity;
-	for (const stroke of strokes) {
-		const box = boundingBox(stroke);
-		minX = Math.min(minX, box.minX);
-		minY = Math.min(minY, box.minY);
-		maxX = Math.max(maxX, box.maxX);
-		maxY = Math.max(maxY, box.maxY);
-	}
-	return at.x >= minX && at.x <= maxX && at.y >= minY && at.y <= maxY;
+	const box = strokesBoundingBox(strokes);
+	if (!box) return false;
+	return at.x >= box.minX && at.x <= box.maxX && at.y >= box.minY && at.y <= box.maxY;
 }
 
 export interface CanvasModeNoteStateDeps {

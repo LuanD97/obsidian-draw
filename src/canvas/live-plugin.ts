@@ -16,12 +16,22 @@ export class CanvasLivePluginInstance {
 	// undocumented-internals assumption failing (as insertBefore's did) must
 	// degrade to dropping the session, never to crashing the editor or the
 	// plugin's load sequence.
+	//
+	// Reacts to geometryChanged, not just docChanged: CM6 revises its
+	// internal height estimates (heightOracle/BlockGapWidget) as previously
+	// off-screen lines get measured for real while the user scrolls, with no
+	// document edit involved — ViewUpdate.geometryChanged covers exactly
+	// this ("the document was modified or the size of ... elements within
+	// the editor changed"). Reacting only to docChanged left annotations'
+	// baked-in canvas pixel positions stale after a pure scroll corrected
+	// the layout underneath them (on-device report: ink drifting from its
+	// paragraph, and the note's scrollable height growing, after scrolling).
 	update(update: ViewUpdate): void {
-		if (!this.session || !update.docChanged) return;
+		if (!this.session || !update.geometryChanged) return;
 		try {
-			this.session.onDocChanged();
+			this.session.onLayoutChanged();
 		} catch (e) {
-			console.error('Canvas Mode: onDocChanged failed, deactivating', e);
+			console.error('Canvas Mode: onLayoutChanged failed, deactivating', e);
 			void this.session.destroy().catch(() => {});
 			this.session = null;
 		}

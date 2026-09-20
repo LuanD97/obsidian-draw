@@ -160,10 +160,14 @@
 	opacity: 1;
 }
 
-/* Canvas Mode: inserted as a sibling of .cm-content, inside .cm-scroller
-   (research.md R2), sized in JS to match .cm-content's full scrollable
-   area rather than just the viewport, so it scrolls natively with the note
-   with no manual scroll-offset bookkeeping. */
+/* Canvas Mode: appended to view.dom (.cm-editor, the non-scrolling editor
+   root), sized in JS to the editor's visible viewport, not the scrollable
+   document (research.md R13 — revised from R2's whole-note-sized overlay,
+   which made redraw cost scale with note length and drifted out of sync
+   with CM6's own continuously-revised document height estimate). Scroll
+   tracking is explicit (live-session.ts redraws on scroll, translating
+   strokes' stored absolute-document coordinates by the current scroll
+   offset) rather than "for free" from being a scrolling child. */
 .canvas-mode-overlay {
 	position: absolute;
 	top: 0;

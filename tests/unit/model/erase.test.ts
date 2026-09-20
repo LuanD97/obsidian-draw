@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { hitStrokes, internal } from '../../../src/model/erase';
+import { boxesIntersect, hitStrokes, internal, strokesBoundingBox } from '../../../src/model/erase';
 import type { Stroke } from '../../../src/model/types';
 
 function horizontalStroke(): Stroke {
@@ -63,5 +63,36 @@ describe('hitStrokes', () => {
 		];
 		const hits = hitStrokes(strokes, { x: 15, y: 0 }, 8);
 		expect(hits).toEqual([0, 2]);
+	});
+});
+
+describe('strokesBoundingBox', () => {
+	it('returns null for an empty stroke list', () => {
+		expect(strokesBoundingBox([])).toBeNull();
+	});
+
+	it('unions the bounding boxes of every stroke', () => {
+		const strokes: Stroke[] = [horizontalStroke(), dotStroke()];
+		expect(strokesBoundingBox(strokes)).toEqual({ minX: 0, minY: 0, maxX: 100, maxY: 50 });
+	});
+});
+
+describe('boxesIntersect', () => {
+	it('is true for overlapping boxes', () => {
+		expect(boxesIntersect({ minX: 0, minY: 0, maxX: 10, maxY: 10 }, { minX: 5, minY: 5, maxX: 15, maxY: 15 })).toBe(
+			true,
+		);
+	});
+
+	it('is true for boxes that only touch at an edge', () => {
+		expect(boxesIntersect({ minX: 0, minY: 0, maxX: 10, maxY: 10 }, { minX: 10, minY: 0, maxX: 20, maxY: 10 })).toBe(
+			true,
+		);
+	});
+
+	it('is false for disjoint boxes', () => {
+		expect(
+			boxesIntersect({ minX: 0, minY: 0, maxX: 10, maxY: 10 }, { minX: 100, minY: 100, maxX: 110, maxY: 110 }),
+		).toBe(false);
 	});
 });
