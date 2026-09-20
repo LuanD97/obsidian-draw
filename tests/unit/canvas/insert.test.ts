@@ -66,6 +66,35 @@ describe('insertAnnotationAfterParagraph', () => {
 
 		expect(result).toBe('para one\r\n\r\n' + NEW_BLOCK + '\npara two\r\n');
 	});
+
+	// research.md R16: a non-ink fence (any other language) must be treated as
+	// one atomic chunk, even when it contains a blank line internally — never
+	// split into fake paragraphs that a new annotation could be inserted
+	// between, which would literally break the outer fence into two malformed
+	// pieces.
+	it('never inserts inside an unrelated code fence that contains a blank line', () => {
+		const code = '```js\nfunction a() {}\n\nfunction b() {}\n```\n';
+		const text = 'intro\n\n' + code + '\nend\n';
+		const pos = text.indexOf('function a');
+
+		const result = insertAnnotationAfterParagraph(text, pos, NEW_BLOCK);
+
+		// The whole fenced block survives intact, byte-for-byte, and the new
+		// annotation lands after it (before "end"), not inside it.
+		expect(result).toContain(code);
+		expect(result.indexOf(code) + code.length).toBeLessThanOrEqual(result.indexOf(NEW_BLOCK));
+		expect(result).toBe('intro\n\n' + code + '\n' + NEW_BLOCK + '\nend\n');
+	});
+
+	it('still inserts right after a paragraph that precedes an unrelated code fence with a blank line in it', () => {
+		const code = '```js\nfunction a() {}\n\nfunction b() {}\n```\n';
+		const text = 'intro\n\n' + code + '\nend\n';
+		const pos = text.indexOf('intro');
+
+		const result = insertAnnotationAfterParagraph(text, pos, NEW_BLOCK);
+
+		expect(result).toBe('intro\n\n' + NEW_BLOCK + '\n' + code + '\nend\n');
+	});
 });
 
 describe('findInsertionPoint', () => {

@@ -28,11 +28,23 @@ function isBlank(text: string, line: Line): boolean {
 	return text.slice(line.start, line.end).trim() === '';
 }
 
-// A paragraph is a blank-line-delimited run of lines; an "ink"/"ink-canvas"
-// fenced block is its own chunk so a new annotation can be inserted after any
-// that already trail a paragraph, instead of between the paragraph and them.
-// Any other fence is not specially recognised (a spike-level simplification:
-// its lines are just non-blank paragraph text, same as any other line).
+// A paragraph is a blank-line-delimited run of lines. Any fence — "ink"/
+// "ink-canvas" or otherwise (a ```js code block, say) — is scanned through to
+// its own matching close as a single atomic chunk, never split by a blank
+// line inside it: only an "ink"/"ink-canvas" fence gets `kind: 'block'` (so a
+// new annotation can be inserted after any that already trail a paragraph,
+// instead of between the paragraph and them); any other fence gets
+// `kind: 'paragraph'`, since findInsertionPoint only needs to know whether to
+// skip *trailing ink blocks*, not to specially recognise every other fence
+// language — but its content must still never be treated as several separate
+// paragraphs. An earlier version only gave this atomic, skip-to-close
+// treatment to ink/ink-canvas fences and fell through to the generic
+// blank-line-delimited paragraph scan for every other fence — so a code
+// block containing a blank line (extremely common) got misread as two
+// separate paragraphs split at that blank line, and a new annotation drawn
+// near it could be inserted *inside* the code fence, breaking it into two
+// malformed pieces. Found on-device as ink "distortion" correlated with a
+// note already containing an unrelated code block (research.md R16).
 function chunkify(text: string, lines: Line[]): Chunk[] {
 	const chunks: Chunk[] = [];
 	let i = 0;
@@ -45,9 +57,9 @@ function chunkify(text: string, lines: Line[]): Chunk[] {
 
 		const trimmed = text.slice(line.start, line.end).trim();
 		const fenceMatch = FENCE_RE.exec(trimmed);
-		const info = fenceMatch ? fenceMatch[2]!.trim() : null;
 
-		if (fenceMatch && (info === 'ink' || info === 'ink-canvas')) {
+		if (fenceMatch) {
+			const info = fenceMatch[2]!.trim();
 			const fenceChar = (fenceMatch[1] as string)[0] as string;
 			const fenceLen = (fenceMatch[1] as string).length;
 			let j = i + 1;
@@ -61,7 +73,8 @@ function chunkify(text: string, lines: Line[]): Chunk[] {
 				j += 1;
 			}
 			const endLine = closed ? j : lines.length - 1;
-			chunks.push({ kind: 'block', startLine: i, endLine });
+			const kind = info === 'ink' || info === 'ink-canvas' ? 'block' : 'paragraph';
+			chunks.push({ kind, startLine: i, endLine });
 			i = closed ? j + 1 : lines.length;
 			continue;
 		}
