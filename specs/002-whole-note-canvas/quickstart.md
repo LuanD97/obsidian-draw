@@ -111,6 +111,89 @@ real device — exactly the category of risk this spike exists to surface (R1 wa
 area as the highest-risk, device-only bet, even though the *specific* failure mode differed from what
 was anticipated).
 
+### On-device findings, round two (input lag + scroll desync)
+
+A second round reported input feeling slow, ink "desyncing" from its paragraph on scroll, and the
+note's scrollable area growing with blank space above the content after scrolling. Root-caused
+against `@codemirror/view`'s own source/types (not guessed): the redraw path recomputed
+`coordsAtPos()` per annotation on every pointer move with no frame throttling (the lag), and the
+session only refreshed anchors/overlay size on `ViewUpdate.docChanged`, missing that CM6 corrects its
+internal height estimates — and fires `geometryChanged`/`heightChanged`, not `docChanged` — as
+previously off-screen content gets measured for real while scrolling (the desync). Both fixed; see
+research.md R12 for full detail.
+
+### On-device findings, round three (lag scaling with note length, blank space still growing, reopen failure)
+
+The scroll desync itself was confirmed fixed ("scribbles now stay attached to the note"), but three
+more symptoms showed up: input lag now scaled with note length (small notes near-instant, long notes
+appreciably laggy — the R12 fix throttled *frequency* but not *cost per frame*), the note's scrollable
+area still grew with blank space above the content on scroll (R12's fix kept anchors correct but never
+addressed the overlay's own size tracking), and — most seriously — a note once turned into a canvas
+could no longer be reopened at all after being closed (Obsidian showing a generic "failed to open"
+error).
+
+The first two were traced to R2's original decision to size the overlay to the whole note rather than
+the viewport, which is now reversed — see research.md R13. The third produced one confirmed, separate
+bug on inspection (`main.ts`'s `syncCanvasSession` trusting a stale cached-file comparison instead of
+the live plugin's own session state — research.md R14), but that fix is **not confirmed to be the full
+explanation** for the reported error; it needs a repro to know whether this is a plugin-activation
+failure (Canvas Mode silently not restarting) or actual file corruption (the note's raw Markdown
+itself failing to open even outside this plugin).
+
+### On-device findings, round four (R13/R14 partially confirmed; distortion and reopen both persist)
+
+R13 helped: the user confirmed "the behaviour has definitely improved on the scroll vertical sync."
+But two things did not fully resolve:
+
+- **A residual "distortion,"** more likely the longer the note but not a strict one-page/multi-page
+  cutoff. Root-caused to a second, distinct bug — static annotations were still painted at an anchor
+  *cached* by the last `loadStatic()` call, which can go stale in the window between a CM6 layout
+  correction and the next `geometryChanged` event. Fixed by re-resolving each on-screen candidate's
+  anchor fresh on every redraw instead of trusting the cache to paint with — see research.md R15.
+  **Not yet on-device confirmed.**
+- **The reopen failure is still present.** R14's fix (checking the live plugin's session instead of a
+  cached file reference) did not resolve it. File corruption has been ruled out (the user confirmed the
+  note's `ink-canvas` blocks look intact in git's diff view), narrowing this to a plugin- or
+  Obsidian-activation-path failure, but the actual mechanism is still unknown. **This needs a repro from
+  the user to make further progress on**, not another guess: (a) does "exit the page" mean switching to
+  a different note within Obsidian, or fully closing/backgrounding the app and reopening it later — these
+  point at different code paths (`active-leaf-change`/`file-open` vs. `onLayoutReady`); (b) the exact
+  console output from Safari Web Inspector at the moment the error appears, if it can be captured
+  (CLAUDE.md's own documented debugging path for this device).
+
+### On-device findings, round five (distortion re-diagnosed as file corruption; reopen bug pinned down and fixed)
+
+Two clarifications from the user substantially changed the diagnosis for both open items:
+
+- **The "distortion" correlated with the note already containing a code block, not with note length.**
+  That pointed away from R15's stale-anchor theory and at `insert.ts`'s `chunkify()`: a non-ink fence
+  (e.g. a ` ```js ` block) containing a blank line — extremely common — was misread as two separate
+  paragraphs, and a new annotation drawn near it could be inserted *inside* the fence, breaking it into
+  two malformed pieces. This is real file corruption, not a rendering bug, and a far more plausible
+  explanation for visually wrong rendering than R15 (which may still be a real, separate, smaller
+  effect). Fixed with direct unit-test coverage (unlike the glue-only R12–R15 fixes) — see research.md
+  R16.
+- **The exact reopen error was captured: "Canvas Mode couldn't find its editor extension."** That's a
+  specific, known code path (`getCanvasSession` returning null), not a mystery — it means Obsidian
+  hadn't finished attaching our globally-registered CM6 extension to the freshly-reopened note's
+  `EditorView` yet at the moment we checked, the same class of event-fires-before-dependent-state-
+  settles race as R11's frontmatter-cache timing. Fixed with a bounded retry (research.md R17).
+
+### On-device findings, round six (both remaining items need evidence, not another guess)
+
+R17's retry fix confirmed working for its own symptom (the "couldn't find its editor extension" Notice
+no longer appears) — but "failed to open ''" still happens on reopen, unchanged, proving it was never
+actually caused by that Notice/race in the first place. Separately, the "distortion" was narrowed by
+the user to a Block Mode `ink` block near a Canvas Mode `ink-canvas` annotation (not a generic code
+block as R16 assumed) — R16's fix is still a real, valid bug fix, just not the explanation for this
+specific symptom.
+
+Both are now genuinely open with no remaining code-review-based hypothesis worth trying blind — see
+research.md's "Still open" section for exactly what's needed next (Safari Web Inspector console output
+for the reopen error; a screenshot or git diff, plus which of three possible meanings "distortion"
+refers to, for the adjacency issue). Checklist item 11 (Block Mode/Canvas Mode coexistence) is now the
+most relevant unchecked item given the adjacency clue.
+
 ### What was verified automatically
 
 ### What was verified automatically

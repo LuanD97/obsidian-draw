@@ -209,3 +209,294 @@ doesn't have to rediscover them.
   `touch-action` finding) came from exactly that category, not from the pure/tested modules. Any new
   code touching these should assume the same and fail closed (try/catch, no data-handling decisions,
   visible `Notice`/console output) rather than assume the happy path.
+
+## R12. Redraw was `docChanged`-only; CM6 relayouts on pure scroll too (found and fixed from on-device reports)
+
+A second round of on-device testing (after R11's three fixes let drawing actually work) reported
+three symptoms: input felt "very slow to go from input to page," ink "desynced" from its paragraph
+every time the note was scrolled, and the note's scrollable area grew with blank space appearing
+above the content after scrolling. Both root causes were confirmed directly against
+`@codemirror/view`'s own source and types (`node_modules/@codemirror/view/dist/index.d.ts`), not
+guessed from symptoms alone:
+
+- **Redraw cost (the "slow" report)**: `CanvasModeSession.redraw()` ran on every single
+  `pointermove` — the Pencil samples at high frequency, further multiplied by
+  `getCoalescedEvents()` — and for each redraw it called `view.coordsAtPos()` (a layout-forcing
+  measurement) once per *existing* static annotation, then cleared and repainted a canvas sized to
+  the entire note's scrollable area (not just the viewport), synchronously, with no frame
+  throttling. **Fix**: each static annotation's anchor point is now resolved once in `loadStatic()`
+  (see below for when that reruns) and cached on the `StaticAnnotation`, so `redraw()` just reads it;
+  and `onPenStart`/`onPenMove` now schedule at most one `redraw()` per animation frame via
+  `requestAnimationFrame` instead of one per pointer event, coalescing a burst of moves into a single
+  repaint.
+- **Scroll desync and growing blank space (the "desync" report)**: `CanvasLivePluginInstance.update()`
+  only called back into the session on `ViewUpdate.docChanged`. But CM6 does not measure a large
+  document's line heights up front — it estimates them (`heightOracle`) and represents unmeasured
+  regions with resizable `BlockGapWidget` spacers inside `.cm-content`, then corrects the estimate to
+  the real measured height as previously off-screen lines scroll into view, with **no document edit
+  involved**. That correction sets `ViewUpdate.heightChanged`/`geometryChanged`, not `docChanged` (per
+  `ViewUpdate`'s own doc comments: `geometryChanged` — "the document was modified **or** the size of
+  the editor, or elements within the editor, changed"; `heightChanged` — "the height of a block
+  element in the editor changed"). Because the session never re-resolved anchors or resized the
+  overlay on those events, a stroke's already-painted canvas pixels went stale the moment scrolling
+  triggered a height correction anywhere above it — explaining both the visual drift and the
+  overlay's (and hence the scroller's) fixed-at-construction size falling out of sync with the note's
+  now-corrected real height. **Fix**: the ViewPlugin now reacts to `update.geometryChanged` (a
+  superset of `docChanged` per its own doc comment) instead of `update.docChanged` alone, calling a
+  renamed `CanvasModeSession.onLayoutChanged()` (was `onDocChanged()`) that re-runs `loadStatic()` and
+  `resizeAndRedraw()` on any layout-affecting update, not just a text edit.
+- **Not yet on-device confirmed**: both fixes are typecheck/test/build-clean (`npm test` — 296 tests
+  — all pass unchanged, since this area is glue per the constitution's exemption) but the actual
+  on-device feel (has the lag gone, does scrolling really stop desyncing the ink) has not been
+  re-checked with the user's iPad yet. Record the outcome here, the same way R11 recorded its three
+  fixes' confirmation status, once that happens.
+- **Takeaway**: this is the same category of risk as R1/R11 — undocumented-by-design internal CM6
+  behavior (here, height-estimate correction during scroll) that the automated suite structurally
+  cannot exercise (there is no real CM6 layout/measurement in a headless test environment). Any future
+  redraw-triggering logic in this area should keep treating `docChanged` as insufficient on its own
+  for "did the layout change" and prefer `geometryChanged`.
+
+## R13. R2 reversed: the overlay is sized to the viewport, not the whole note (found and fixed from on-device reports)
+
+R12's `geometryChanged` fix stopped the ink from drifting off its paragraph, but a third on-device
+round reported two symptoms that survived it: input lag got worse the longer the note was (small
+notes near-instant, long notes appreciably laggy), and the note's scrollable area still grew, with
+blank space appearing above the content, as the user scrolled.
+
+Both traced to the same design choice: **R2 sized `.canvas-mode-overlay` to
+`.cm-content`'s measured `scrollWidth`/`scrollHeight` — a stand-in for "the whole note's height" —
+and appended it inside `.cm-scroller` so it would scroll natively.** Two consequences followed that
+R2 didn't anticipate:
+
+- **Redraw cost scaled with note length, not viewport size.** Every redraw (already throttled to one
+  per animation frame by R12's fix) still cleared and repainted a canvas whose pixel area was the
+  *entire note's* rendered height × width, at up to 2x device pixel ratio — for a long note, that's a
+  canvas many times taller than what's ever on screen at once, recomposited on every frame of a
+  stroke regardless of how much of it was actually visible.
+- **The overlay's own JS-measured size was exactly the fragile, ever-corrected quantity R12 diagnosed.**
+  `content.scrollHeight` is CM6's *current estimate* of the document's total height (real for rendered
+  lines, `BlockGapWidget`-estimated for the rest — see R12), so sizing our own overlay from it meant
+  re-measuring and resizing the overlay itself every time that estimate changed while scrolling — and
+  since the overlay is a `position: absolute` descendant of the scrolling `.cm-scroller`, its own
+  (JS-driven, and therefore laggier than CM6's own internal layout pass) size directly determines part
+  of what the user's scroll gesture feels like it's scrolling through, which is what read as "blank
+  space growing at the top."
+
+**Fix**: stop tracking the document's total height at all. `CanvasModeSession`'s overlay/canvas is now
+appended to `view.dom` (CM6's outer, non-scrolling `.cm-editor` root — public, documented API) and
+sized to `view.dom.clientWidth/clientHeight` (the editor's visible viewport), never the scrollable
+document. Since the overlay no longer scrolls "for free" as a scrolling child, `redraw()` now
+explicitly `ctx.translate(-scrollLeft, -scrollTop)`s before drawing (strokes are still stored/anchored
+in absolute document-space coordinates, per R2/R3, unchanged — only the paint-time mapping onto the
+canvas changed) and a `scroll` listener on `.cm-scroller` schedules a repaint (reusing the same rAF
+throttle as live drawing) so already-painted ink keeps tracking scroll instead of only refreshing on
+the next `geometryChanged`/pointer event. Off-screen static and session annotations are also now
+skipped via a cached bounding-box vs. current-viewport intersection check
+(`model/erase.ts`'s `strokesBoundingBox`/`boxesIntersect`, shared with `session.ts`'s existing
+erase-target hit-testing) before paying for `strokeOutlinePath`'s perfect-freehand work, so redraw cost
+no longer scales with how many annotations a note has accumulated either.
+
+- **Alternatives considered**: keeping the overlay full-note-sized but only clearing/redrawing the
+  visible sub-rectangle each frame (a smaller patch than reversing R2) was rejected as still leaving
+  the overlay's *size* tied to the fragile `scrollHeight` estimate — it would have fixed the lag but
+  not the blank-space growth, which came from the size measurement itself, not from what area got
+  repainted.
+- **Not yet on-device confirmed.** Like R12, this is typecheck/test/build-clean but unverified on the
+  iPad — record the outcome here once checked, including whether the explicit scroll-triggered redraw
+  introduces any visible one-frame lag of ink "catching up" during a fast scroll fling (a plausible,
+  acceptable-if-so cosmetic trade-off of giving up native scrolling, not a correctness bug).
+- **Takeaway**: the R2 alternatives-considered section rejected a `document.body`-attached overlay
+  specifically because it would have to "track continuous scrolling of live, reflowing content,"
+  reasoning that a scrolling-child overlay got that "for free." On-device evidence now shows that
+  "for free" was true only for *position*, not for *cost* or *size stability* — both turned out to
+  depend on the same undocumented, continuously-revised CM6 internal quantity (document height
+  estimate) that R12 already flagged as unreliable to build on.
+
+## R14. `syncCanvasSession` trusted its own cache over the live plugin's session (found alongside R13, not yet confirmed as the cause of a reopen failure)
+
+The same round that reported R13's symptoms also reported that a note once turned into a canvas could
+no longer be reopened at all (Obsidian showing a generic "failed to open" error). The root cause of
+*that specific error* is not confirmed — it may be a knock-on effect of R13's redraw cost being severe
+enough to stall something else, or it may be independent — but a real, separate bug was found by
+inspection while investigating it: `main.ts`'s `syncCanvasSession()` decided whether to (re)activate
+Canvas Mode by comparing `this.activeCanvasFile !== file` against its own cached `TFile` reference,
+not by checking whether the *current* view's editor actually still had a session. Obsidian can reuse
+the same `TFile` object across closing and reopening the same note's leaf, in which case CM6 tears
+down the old `EditorView` (and, via `CanvasLivePluginInstance.destroy()`, its session) without
+`main.ts` hearing about it — leaving `activeCanvasFile` pointing at a by-reference-equal file whose
+session no longer exists. On reopen, the equality check read that as "already active" and skipped
+creating a session for the *new* `EditorView` entirely, so Canvas Mode silently never came back for
+that note. **Fix**: `syncCanvasSession` now checks `getCanvasSession(editorView)?.session` on the
+current view directly — the live plugin instance is the source of truth, not `main.ts`'s cache of it.
+
+**File integrity ruled out as the cause**: the user confirmed the note's `ink-canvas` blocks are
+visible with their stroke payload intact in git's diff view, i.e. the saved Markdown itself is well-
+formed and un-corrupted. That narrows "failed to open ''" to a plugin/Obsidian-activation-path failure
+rather than file corruption — consistent with (though not yet proven to be explained by) this fix.
+**Still not on-device confirmed** whether this fix actually resolves the reopen failure — it did not:
+the user re-confirmed the reopen failure is still present after this fix shipped. The next step is a
+repro from the user, not another guess: whether "exit the page" means switching to another note within
+Obsidian or fully closing/backgrounding the app, and the exact console output from Safari Web Inspector
+if one can be captured (see quickstart.md's on-device findings, round four).
+
+## R15. Cached anchors go briefly stale mid-scroll on long notes ("distortion", confirmed on-device as improved-but-not-gone)
+
+After R13 shipped, the user confirmed vertical scroll sync "definitely improved," but a residual
+"distortion" remained, probabilistically more likely the longer the note — not a hard one-page/
+multi-page cutoff. This is a *different* bug from R12/R13, not a leftover of either: R12 made
+`onLayoutChanged()` (anchor re-resolution) run on every `geometryChanged` event, and R13 made
+`redraw()` cheap enough to run every frame — but `redraw()` was still painting each static
+annotation at its **anchor as cached by the most recent `loadStatic()`**, not a value re-checked
+against the document's *current* layout at paint time. CM6 corrects a not-yet-fully-measured
+position's real coordinates as previously off-screen content gets measured for real while scrolling
+(R12's finding); that correction is exactly what `geometryChanged` fires for, but it fires as its own
+event, arriving at a different point in time than a given `redraw()` call — so there is necessarily a
+window, between "CM6 corrected this position" and "our next `onLayoutChanged()` re-cached it," where a
+redraw can still use the stale cached anchor. The longer the note, the more corrections happen while
+scrolling through never-before-rendered territory, so the more chances there are to redraw during that
+window — matching "probabilistic, more likely the longer the page."
+
+**Fix**: `redraw()` no longer draws a static annotation at its cached anchor at all. The cached value
+(renamed `approxBBox` on `StaticAnnotation`) is now only a cheap pre-filter — expanded by a full
+viewport's margin in every direction, to tolerate exactly this kind of staleness without wrongly
+skipping something that scrolled into range — for whether an annotation is worth resolving at all.
+Anything that passes the filter gets its anchor **re-resolved fresh** (a real `coordsAtPos` call)
+right before it's drawn, every single redraw, so the ink is always painted at the document's *current*
+truth, never a value that could be one correction behind. This keeps R12's original perf fix intact
+(the expensive `coordsAtPos` call still only runs for annotations plausibly near the viewport, not
+every annotation in the note) while closing the correctness gap that caused visible distortion.
+
+- **Not yet on-device confirmed.**
+- **Takeaway**: this is the second time (after R13) that a cache of something CM6 can silently correct
+  mid-scroll (first the overlay's own size, now an individual annotation's screen position) caused a
+  visible bug once the *other* half of the picture (redraw frequency, or filtering) was already fixed.
+  Any remaining code in this area that reads a `coordsAtPos`-derived value should treat it as valid
+  only for the instant it was read, not something safe to cache across frames, unless it's gated by
+  something that's cheap specifically because it doesn't need to be exact (like `approxBBox` now is).
+
+## R16. A non-ink fence containing a blank line could get split into fake paragraphs, corrupting it (found and fixed)
+
+The "distortion" reports (R15) turned out not to be primarily a rendering bug at all. The user
+narrowed it down: it correlated with the note *already containing a code block or something else*, not
+with note length. That pointed at `insert.ts`'s `chunkify()`, which computes where a new annotation's
+block gets inserted (and therefore what its anchor is).
+
+`chunkify` gave "ink"/"ink-canvas" fences correct atomic treatment (scanned through to their own
+matching closing fence, never split), but explicitly did *not* extend that to any other fence
+language — the code comment said this was "a spike-level simplification: its lines are just non-blank
+paragraph text, same as any other line." In practice this meant a fence like a ` ```js ` code block
+fell through to the generic paragraph scan, which stops at the **first blank line** — and a code block
+with a blank line inside it (extremely common: blank lines between functions, list items, etc.) got
+misread as two separate "paragraphs" split at that internal blank line. `findInsertionPoint` could then
+resolve a new annotation's insertion point to a position **inside** that fence's content, and inserting
+the new `ink-canvas` block markdown there injected a second, unrelated opening/closing fence pair in
+the middle of the original one — breaking it into two malformed pieces. This is document corruption,
+not a cosmetic bug: once the file's fence structure was broken, everything downstream (CM6's own
+Markdown parsing, syntax highlighting, our own `ink-canvas`-hiding decoration) was operating on a
+malformed document, which is a far more plausible explanation for visually "distorted" rendering than
+R15's (real, but apparently secondary) stale-anchor race.
+
+**Fix**: `chunkify` now scans *any* fence through to its own matching close as one atomic chunk,
+regardless of language — only "ink"/"ink-canvas" fences get `kind: 'block'` (which `findInsertionPoint`
+uses to skip past *trailing ink blocks* specifically); every other fence gets `kind: 'paragraph'`,
+correctly treated as one indivisible unit that a new annotation can be inserted after, never inside.
+Regression tests added: a code fence containing a blank line survives byte-for-byte with the new
+annotation placed after it, whether the pen-down position was inside the fence or in the paragraph
+before it.
+
+- **Not yet on-device confirmed**, though this is a pure-module fix with direct unit-test coverage
+  (unlike R12/R13/R14/R15, which are glue and can only be checked on-device).
+- **Takeaway**: "a spike-level simplification" is a reasonable thing to write down, but this instance of
+  it was actually a silent data-integrity gap, not just a missing nice-to-have (contrast with R9's "no
+  visible margin" simplification, which is genuinely just a degraded-but-safe UX outcome). Worth
+  double-checking, for any future "not specially recognised" simplification in this codebase, whether
+  the unhandled case can actually corrupt the file rather than just render suboptimally.
+- **Correction from the user, next round**: the actual trigger was not a generic code block — it was a
+  spec 001 Block Mode `ink` block near a Canvas Mode `ink-canvas` annotation (drawn strokes placed near
+  each other). `chunkify` already gave `ink` the same atomic block-kind treatment as `ink-canvas` (this
+  fix didn't change that), so R16's fix is real and worth keeping, but it does **not** explain the
+  ink/ink-canvas-adjacency symptom the user is actually hitting. Root cause for *that* is still open —
+  see the "still open" note below rather than treating R16 as closed.
+
+## R17. `getCanvasSession` can return null for a few milliseconds after reopening a note (found and fixed)
+
+The reopen failure (R14) persisted after that fix, and the user captured the exact error text this
+time: "Canvas Mode couldn't find its editor extension." That's `main.ts`'s own Notice for
+`getCanvasSession(editorView)` returning null — i.e. `view.plugin(canvasLiveViewPlugin)` found no
+instance of our globally-registered `ViewPlugin` on the freshly-obtained `EditorView`. The user also
+confirmed the trigger precisely: switching to a different note and back, or closing the tab and
+reopening it — not a full app restart (which R11's `insertBefore` fix already covers via
+`onLayoutReady`).
+
+This is the same *class* of race as R11's frontmatter-cache timing: `registerEditorExtension`'s
+extension list is applied to a newly-created `EditorView` by Obsidian slightly *after* that leaf
+becomes the active view and fires `active-leaf-change`/`file-open` — so a synchronous check at the
+moment those events fire can observe an `EditorView` that exists (passes `getEditorView`'s
+`instanceof` check) but doesn't have our `ViewPlugin` attached yet. There is no documented "editor
+extensions are now applied" event to wait for instead.
+
+**Fix**: `activateCanvasSession` now retries up to 6 times, 50ms apart, before giving up and showing
+the Notice — matching the same "fail closed, but not on the very first synchronous check" shape as
+R11's fix for the analogous frontmatter-cache race. Each retry re-checks that the workspace's active
+view is still the one being activated for, so a user who's already switched to something else by the
+time a retry fires doesn't get a session created for a view they've left (a subsequent
+`syncCanvasSession()` call already owns that decision).
+
+- **Partially confirmed, and reveals R14/R17 were never the cause of "failed to open ''":** the user
+  confirmed the "couldn't find its editor extension" Notice no longer appears after this fix — so the
+  retry does what it was meant to do. But the generic Obsidian "failed to open ''" error **still
+  happens on reopen**, unchanged. Since that error persisted after the one Notice it could plausibly
+  have been tied to stopped firing, R14 and R17 are now confirmed to be real, legitimate fixes for a
+  real (if previously conflated) problem — but neither one was ever the explanation for "failed to open
+  ''". That error's actual cause is still completely open; see the "still open" note below.
+- **Takeaway**: this is the *third* instance in this project of "an event fires to announce a change,
+  but some dependent piece of Obsidian/CM6 state hasn't caught up to it yet" (R11's frontmatter cache,
+  R12's `docChanged` vs. `geometryChanged`, now this). Any future activation/glue code reacting
+  synchronously to an Obsidian workspace event should default to assuming the announced state might not
+  be fully settled yet, rather than trusting the first synchronous read.
+
+## Still open: "failed to open ''" on reopen, and ink/ink-canvas adjacency
+
+Two items where guessing further from static analysis alone has stopped being productive — both need
+evidence from the user to make real progress, rather than another speculative fix:
+
+- **"failed to open ''"**: confirmed independent of R14/R17 (see above) and of file corruption (R14's
+  note). No remaining code-review-based hypothesis in this file explains it. **Next step**: the exact
+  console output from Safari Web Inspector at the moment the error appears (CLAUDE.md's own documented
+  debugging path for this device) — without it, further attempts here would just be more guesses.
+- **Ink/ink-canvas adjacency, re-described (not visual "distortion" — a positional jump that worsens
+  with repeated scrolling)**: the user clarified precisely: drawn strokes don't stay where they were
+  drawn — they jump to a *different part of the document* on scroll, and each subsequent scroll makes
+  it worse, specifically when a Block Mode `ink` block coexists with a Canvas Mode `ink-canvas`
+  annotation nearby. "Worse after each scroll" (progressive, not a one-time wrong value or a toggle
+  between two fixed states) is the most specific clue so far and rules out a few things: R15's
+  fresh-`coordsAtPos`-per-redraw fix means each redraw independently recomputes from the *current*
+  document/layout state with no persisted running value in this project's own code — nothing in
+  `live-session.ts` accumulates a delta across calls, so a genuinely *compounding* error is more
+  consistent with something outside this plugin's control shifting *between* each redraw: most plausibly
+  CM6/Obsidian re-measuring the `ink` block's real rendered SVG-preview height differently each time
+  Live Preview's virtualization unmounts and remounts that widget (scrolling it out of and back into the
+  rendered range), which would feed a shifting value into `coordsAtPos` for anything positioned after it
+  — a hypothesis, not yet confirmed. A second, not-yet-ruled-out candidate: `coordsAtPos` at the exact
+  boundary of two adjacent replace-decorations from different sources (this project's own `ink-canvas`
+  hiding widget immediately after Block Mode's real, sizeable `ink` preview widget) is a known-ambiguous
+  case in CM6 (which side of an atomic/replace range a boundary position resolves to), which R4's own
+  "Risk" note already flagged as untested for interaction with Obsidian's Live Preview. This cannot be
+  reproduced in this project's test suite (happy-dom does no real layout, so `coordsAtPos` and real
+  widget heights are meaningless there) — it can only be investigated on-device or with much more
+  specific reproduction detail. **Next step, needed from the user**: whether it jumps to a *consistent*
+  wrong location (e.g., always near the ink block) or somewhere different each time; roughly how far it
+  moves after one scroll vs. several; and whether the same thing happens with any other real,
+  non-trivial-height widget near a canvas annotation (an image embed, say) or specifically only with a
+  Block Mode `ink` block.
+
+## Future work: readable diffs for interspersed `ink-canvas` blocks (decision: git diff driver)
+
+Queued by the user, decided but not yet implemented: rather than relocating `ink-canvas` blocks in the
+file (which would require replacing R3's position-is-the-anchor design with a content-fingerprint or
+stable-paragraph-id anchor — a much bigger change, and the originally-considered, then-rejected
+alternative in R3), the agreed fix is a `.gitattributes` `diff` driver (`textconv`) that rewrites
+`ink-canvas` blocks to something short like `[ink-canvas id=k3f9x2ab, 4.1KB]` for `git diff` display
+only. This leaves the actual file and R3's anchoring completely untouched — it's a git-config addition,
+not a plugin change — and directly targets the user's actual complaint (diff noise), not the
+block-placement guess that turned out to have a real cost. To implement when picked up.
