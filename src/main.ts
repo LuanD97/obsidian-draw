@@ -108,6 +108,20 @@ export default class DrawPlugin extends Plugin {
 	// note is active and whether it currently has canvas-mode: true —
 	// covering both the toggle command and switching to/from an
 	// already-enabled note (contracts/canvas-mode-toggle.md "Activation scope").
+	//
+	// Whether to (re)activate is decided from the *current* view's own CM6
+	// plugin instance (getCanvasSession(editorView)?.session), not from
+	// this.activeCanvasFile/activeCanvasPlugin's cached equality check
+	// against `file`. Obsidian can reuse the same TFile object across a
+	// close-then-reopen of the same note's leaf/tab, in which case CM6 tears
+	// down the old EditorView (and, via CanvasLivePluginInstance.destroy(),
+	// its session) without this class ever hearing about it — leaving
+	// activeCanvasFile still pointing at that (by-reference-equal) file. The
+	// old `this.activeCanvasFile !== file` guard then treated that as
+	// "already active" and skipped creating a session for the *new*
+	// EditorView entirely, so the reopened note silently never got Canvas
+	// Mode back. Checking the live plugin's own session is the source of
+	// truth regardless of what this class's cache still remembers.
 	private syncCanvasSession(): void {
 		const view = this.app.workspace.getActiveViewOfType(MarkdownView);
 		const file = view?.file ?? null;
@@ -117,7 +131,14 @@ export default class DrawPlugin extends Plugin {
 			this.deactivateCanvasSession();
 		}
 
-		if (enabled && file && view && this.activeCanvasFile !== file) {
+		if (!enabled || !file || !view) return;
+
+		const editorView = this.getEditorView(view);
+		const plugin = editorView ? getCanvasSession(editorView) : null;
+		if (plugin?.session) {
+			this.activeCanvasFile = file;
+			this.activeCanvasPlugin = plugin;
+		} else {
 			this.activateCanvasSession(view, file);
 		}
 	}
@@ -127,7 +148,22 @@ export default class DrawPlugin extends Plugin {
 	// workspace event handler, and an uncaught exception in either would
 	// otherwise surface as "plugin failed to load" or a broken workspace —
 	// far worse than Canvas Mode simply not activating for one note.
-	private activateCanvasSession(view: MarkdownView, file: TFile): void {
+	//
+	// getCanvasSession(editorView) can legitimately return null for a fresh
+	// EditorView for a few milliseconds after Obsidian creates it: our
+	// globally-registered editor extension (registerEditorExtension in
+	// onload()) is applied to a new/reopened leaf's EditorView slightly after
+	// the leaf itself becomes the active view and fires 'active-leaf-change'/
+	// 'file-open' — the same class of "event fires before the thing it
+	// announces has fully caught up" race as R11's frontmatter-cache timing,
+	// confirmed on-device (the user hit exactly the "couldn't find its editor
+	// extension" Notice specifically when switching away from and back to, or
+	// closing and reopening, a canvas-mode note). Retrying a few times over a
+	// short window before giving up is the same "fail closed, but not on the
+	// very first synchronous check" fix as that earlier race (research.md R17).
+	private activateCanvasSession(view: MarkdownView, file: TFile, attempt = 0): void {
+		const MAX_ATTEMPTS = 6;
+		const RETRY_DELAY_MS = 50;
 		try {
 			const editorView = this.getEditorView(view);
 			if (!editorView) {
@@ -136,6 +172,18 @@ export default class DrawPlugin extends Plugin {
 			}
 			const plugin = getCanvasSession(editorView);
 			if (!plugin) {
+				if (attempt < MAX_ATTEMPTS) {
+					window.setTimeout(() => {
+						// The active view may have changed while waiting; only
+						// retry if this is still the one the user is looking at,
+						// otherwise a later syncCanvasSession() call already owns
+						// deciding what (if anything) to activate.
+						if (this.app.workspace.getActiveViewOfType(MarkdownView) === view) {
+							this.activateCanvasSession(view, file, attempt + 1);
+						}
+					}, RETRY_DELAY_MS);
+					return;
+				}
 				new Notice("Canvas Mode couldn't find its editor extension — try reloading Obsidian");
 				return;
 			}
