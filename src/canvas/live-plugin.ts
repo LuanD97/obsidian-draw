@@ -28,6 +28,16 @@ export class CanvasLivePluginInstance {
 	// paragraph, and the note's scrollable height growing, after scrolling).
 	update(update: ViewUpdate): void {
 		if (!this.session || !update.geometryChanged) return;
+		// TEMPORARY diagnostic for the stroke-jump investigation (research.md
+		// "Still open" section) — correlates each layout-triggered redraw with
+		// which specific CM6 update flags fired. Tagged '[CanvasMode:DEBUG]' for
+		// easy filtering/removal.
+		console.warn('[CanvasMode:DEBUG]', 'geometryChanged update', {
+			docChanged: update.docChanged,
+			heightChanged: update.heightChanged,
+			viewportChanged: update.viewportChanged,
+			viewportMoved: update.viewportMoved,
+		});
 		try {
 			this.session.onLayoutChanged();
 		} catch (e) {

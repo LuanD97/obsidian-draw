@@ -24,6 +24,11 @@ interface StaticAnnotation {
 	// Character offset of this annotation's (hidden) block in the current
 	// doc text.
 	anchorOffset: number;
+	// TEMPORARY: kept alongside anchorOffset purely so the debug jump-logger
+	// can key on something stable across ordinary reflow (anchorOffset itself
+	// legitimately changes when unrelated text above it is edited — that's
+	// not a bug, so it shouldn't be reported as a "jump").
+	id: string;
 	strokes: Stroke[]; // anchor-relative, exactly as stored on disk
 	// A *hint* for whether this annotation could be near the viewport, from
 	// the anchor as last resolved in loadStatic() (construction, a doc edit,
@@ -37,6 +42,19 @@ interface StaticAnnotation {
 	// numerous, in a long note) rest without paying for a coordsAtPos call —
 	// keeping both correctness and the R12/R13 perf fix.
 	approxBBox: BoundingBox | null;
+}
+
+// TEMPORARY on-device diagnostic logging for the stroke-jump-on-scroll
+// investigation (research.md "Still open" section). Every line is tagged
+// '[CanvasMode:DEBUG]' so it's easy to filter in Safari Web Inspector's
+// console and easy to grep out of the codebase again once diagnosed — this
+// is not meant to ship. Deliberately logs only on a *detected* anchor jump
+// (not every redraw/frame), so the console stays quiet during normal
+// scrolling and only speaks up exactly when something suspicious happens.
+const DEBUG = true;
+const JUMP_EPSILON_PX = 2;
+function debugLog(...args: unknown[]): void {
+	if (DEBUG) console.warn('[CanvasMode:DEBUG]', ...args);
 }
 
 function toPreviewStroke(raw: RawPoint[]): Stroke {
@@ -82,10 +100,15 @@ export class CanvasModeSession {
 	// contributor to on-device input lag, alongside per-annotation
 	// coordsAtPos above).
 	private redrawFrame: number | null = null;
+	// TEMPORARY: last anchor actually drawn for each static annotation
+	// (keyed by its stable id), purely so debugLog can report *how much* and
+	// *when* it changed instead of every resolution.
+	private readonly lastDrawnAnchor = new Map<string, { x: number; y: number }>();
 
 	constructor(private readonly deps: CanvasModeSessionDeps) {
 		const { view } = deps;
 		const doc = view.dom.ownerDocument;
+		debugLog('session created', { file: deps.file.path });
 
 		this.overlayEl = doc.createElement('div');
 		this.overlayEl.className = 'canvas-mode-overlay';
@@ -133,11 +156,16 @@ export class CanvasModeSession {
 	// reflow with their paragraphs (research.md R3) and re-resolve their
 	// anchors before the next redraw uses them.
 	onLayoutChanged(): void {
+		debugLog('onLayoutChanged (geometryChanged fired)', {
+			scrollTop: this.deps.view.scrollDOM.scrollTop,
+			scrollLeft: this.deps.view.scrollDOM.scrollLeft,
+		});
 		this.loadStatic();
 		this.resizeAndRedraw();
 	}
 
 	async destroy(): Promise<void> {
+		debugLog('session destroyed', { file: this.deps.file.path });
 		this.detachPointer();
 		this.detachScroll();
 		if (this.redrawFrame !== null) {
@@ -171,7 +199,7 @@ export class CanvasModeSession {
 								maxY: localBox.maxY + anchor.y,
 							}
 						: null;
-				loaded.push({ anchorOffset: ref.blockStart, strokes: annotation.strokes, approxBBox });
+				loaded.push({ anchorOffset: ref.blockStart, id: ref.id, strokes: annotation.strokes, approxBBox });
 			} catch {
 				// malformed/unsupported-version: never rendered, never rewritten (FR-010).
 			}
@@ -245,7 +273,10 @@ export class CanvasModeSession {
 			// what keeps this affordable — only annotations already near the
 			// viewport pay for a coordsAtPos call.
 			const anchor = this.resolveAnchorPoint(a.anchorOffset);
-			if (anchor) this.drawStrokesAt(a.strokes, anchor, colour);
+			if (anchor) {
+				if (DEBUG) this.debugCheckJump(a.id, a.anchorOffset, anchor, scroller);
+				this.drawStrokesAt(a.strokes, anchor, colour);
+			}
 		}
 		for (const [, annotation] of this.state.annotations) {
 			const box = strokesBoundingBox(annotation.strokes);
@@ -255,6 +286,32 @@ export class CanvasModeSession {
 			this.drawStrokesAt([toPreviewStroke(this.currentRaw)], { x: 0, y: 0 }, colour);
 		}
 		ctx.restore();
+	}
+
+	// TEMPORARY diagnostic: logs exactly when a static annotation's freshly-
+	// resolved anchor differs from the last one actually drawn, by more than
+	// noise-level jitter, along with the scroll position at that moment —
+	// see research.md's "Still open" section on the stroke-jump investigation.
+	private debugCheckJump(
+		id: string,
+		anchorOffset: number,
+		anchor: { x: number; y: number },
+		scroller: { scrollLeft: number; scrollTop: number },
+	): void {
+		const prev = this.lastDrawnAnchor.get(id);
+		if (prev && (Math.abs(prev.x - anchor.x) > JUMP_EPSILON_PX || Math.abs(prev.y - anchor.y) > JUMP_EPSILON_PX)) {
+			debugLog('anchor jump detected', {
+				id,
+				anchorOffset,
+				from: prev,
+				to: anchor,
+				deltaX: anchor.x - prev.x,
+				deltaY: anchor.y - prev.y,
+				scrollTop: scroller.scrollTop,
+				scrollLeft: scroller.scrollLeft,
+			});
+		}
+		this.lastDrawnAnchor.set(id, anchor);
 	}
 
 	private drawStrokesAt(strokes: Stroke[], anchor: { x: number; y: number }, colour: string): void {

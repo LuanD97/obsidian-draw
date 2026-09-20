@@ -12,6 +12,15 @@ import type { EditingSession } from './editor/session';
 import type { SaveQueue } from './editor/save-queue';
 import type { TFileLike } from './obsidian/vault-save';
 
+// TEMPORARY on-device diagnostic logging for the "failed to open ''" reopen
+// investigation (research.md "Still open" section). Tagged '[CanvasMode:DEBUG]'
+// for easy filtering in Safari Web Inspector's console and easy removal once
+// diagnosed — not meant to ship.
+const DEBUG = true;
+function debugLog(...args: unknown[]): void {
+	if (DEBUG) console.warn('[CanvasMode:DEBUG]', ...args);
+}
+
 // Glue (constitution v1.1.0): registers the code block processor and the
 // insert command, and holds the one open overlay reference. No data-handling
 // decisions of its own; every function it calls is already tested.
@@ -22,6 +31,10 @@ export default class DrawPlugin extends Plugin {
 	// Scale/Scope), tracked directly rather than by re-scanning open leaves.
 	private activeCanvasFile: TFile | null = null;
 	private activeCanvasPlugin: CanvasLivePluginInstance | null = null;
+
+	// TEMPORARY: see onload()'s window listener registration below.
+	private debugOnError: ((e: ErrorEvent) => void) | null = null;
+	private debugOnRejection: ((e: PromiseRejectionEvent) => void) | null = null;
 
 	onload(): void {
 		this.registerMarkdownCodeBlockProcessor('ink', (source, el, ctx) => {
@@ -62,14 +75,38 @@ export default class DrawPlugin extends Plugin {
 			},
 		});
 
-		this.registerEvent(this.app.workspace.on('active-leaf-change', () => this.syncCanvasSession()));
-		this.registerEvent(this.app.workspace.on('file-open', () => this.syncCanvasSession()));
-		this.app.workspace.onLayoutReady(() => this.syncCanvasSession());
+		this.registerEvent(
+			this.app.workspace.on('active-leaf-change', () => {
+				debugLog('active-leaf-change');
+				this.syncCanvasSession();
+			}),
+		);
+		this.registerEvent(
+			this.app.workspace.on('file-open', (file) => {
+				debugLog('file-open', { path: file?.path ?? null });
+				this.syncCanvasSession();
+			}),
+		);
+		this.app.workspace.onLayoutReady(() => {
+			debugLog('onLayoutReady');
+			this.syncCanvasSession();
+		});
+
+		// TEMPORARY: catches anything Obsidian's own file-open pipeline might
+		// otherwise swallow before surfacing only a generic "failed to open"
+		// Notice — logs the real error/rejection, if there is one, at the
+		// moment it happens.
+		this.debugOnError = (e: ErrorEvent) => debugLog('window error', { message: e.message, error: e.error });
+		this.debugOnRejection = (e: PromiseRejectionEvent) => debugLog('unhandled rejection', { reason: e.reason });
+		window.addEventListener('error', this.debugOnError);
+		window.addEventListener('unhandledrejection', this.debugOnRejection);
 	}
 
 	onunload(): void {
 		void this.overlayHandle?.close({ reason: 'unload' });
 		this.deactivateCanvasSession();
+		if (this.debugOnError) window.removeEventListener('error', this.debugOnError);
+		if (this.debugOnRejection) window.removeEventListener('unhandledrejection', this.debugOnRejection);
 	}
 
 	// Community-plugin convention: Obsidian's public Editor API doesn't
@@ -126,6 +163,12 @@ export default class DrawPlugin extends Plugin {
 		const view = this.app.workspace.getActiveViewOfType(MarkdownView);
 		const file = view?.file ?? null;
 		const enabled = file ? isCanvasModeEnabled(this.app.metadataCache.getFileCache(file)?.frontmatter) : false;
+		debugLog('syncCanvasSession', {
+			path: file?.path ?? null,
+			enabled,
+			activeCanvasFilePath: this.activeCanvasFile?.path ?? null,
+			sameFileRef: this.activeCanvasFile === file,
+		});
 
 		if (this.activeCanvasFile && (this.activeCanvasFile !== file || !enabled)) {
 			this.deactivateCanvasSession();
@@ -135,6 +178,11 @@ export default class DrawPlugin extends Plugin {
 
 		const editorView = this.getEditorView(view);
 		const plugin = editorView ? getCanvasSession(editorView) : null;
+		debugLog('syncCanvasSession: current view plugin state', {
+			hasEditorView: !!editorView,
+			hasPlugin: !!plugin,
+			hasSession: !!plugin?.session,
+		});
 		if (plugin?.session) {
 			this.activeCanvasFile = file;
 			this.activeCanvasPlugin = plugin;
@@ -164,9 +212,11 @@ export default class DrawPlugin extends Plugin {
 	private activateCanvasSession(view: MarkdownView, file: TFile, attempt = 0): void {
 		const MAX_ATTEMPTS = 6;
 		const RETRY_DELAY_MS = 50;
+		debugLog('activateCanvasSession attempt', { attempt, path: file.path });
 		try {
 			const editorView = this.getEditorView(view);
 			if (!editorView) {
+				debugLog('activateCanvasSession: no EditorView (getEditorView returned null)');
 				new Notice("Canvas Mode couldn't attach to this editor (unexpected Obsidian internals)");
 				return;
 			}
@@ -180,10 +230,15 @@ export default class DrawPlugin extends Plugin {
 						// deciding what (if anything) to activate.
 						if (this.app.workspace.getActiveViewOfType(MarkdownView) === view) {
 							this.activateCanvasSession(view, file, attempt + 1);
+						} else {
+							debugLog('activateCanvasSession: active view changed during retry wait, abandoning', {
+								path: file.path,
+							});
 						}
 					}, RETRY_DELAY_MS);
 					return;
 				}
+				debugLog('activateCanvasSession: exhausted retries, giving up', { path: file.path });
 				new Notice("Canvas Mode couldn't find its editor extension — try reloading Obsidian");
 				return;
 			}
@@ -197,18 +252,28 @@ export default class DrawPlugin extends Plugin {
 			});
 			this.activeCanvasFile = file;
 			this.activeCanvasPlugin = plugin;
+			debugLog('activateCanvasSession: session created', { path: file.path, attempt });
 		} catch (e) {
+			debugLog('activateCanvasSession: threw', { path: file.path, error: e });
 			console.error('Canvas Mode: failed to activate', e);
 			new Notice("Canvas Mode failed to start for this note — see console for details");
 		}
 	}
 
 	private deactivateCanvasSession(): void {
+		debugLog('deactivateCanvasSession', {
+			path: this.activeCanvasFile?.path ?? null,
+			hadSession: !!this.activeCanvasPlugin?.session,
+		});
 		try {
 			if (this.activeCanvasPlugin?.session) {
-				void this.activeCanvasPlugin.session.destroy().catch((e: unknown) => {
-					console.error('Canvas Mode: failed to tear down cleanly', e);
-				});
+				void this.activeCanvasPlugin.session
+					.destroy()
+					.then(() => debugLog('deactivateCanvasSession: async destroy() resolved'))
+					.catch((e: unknown) => {
+						debugLog('deactivateCanvasSession: async destroy() rejected', { error: e });
+						console.error('Canvas Mode: failed to tear down cleanly', e);
+					});
 				this.activeCanvasPlugin.session = null;
 			}
 		} catch (e) {
