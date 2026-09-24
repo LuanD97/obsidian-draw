@@ -653,6 +653,52 @@ caching a wrong anchor pixel position for that id. Fixed by making `onPenEnd()` 
   should default to a margin, not exact containment, unless there's a specific reason strokes must
   physically touch to be considered related.
 
+## R21. The blank-line padding around every inserted block, not just fragmentation, was the real source of "too many spaces" (found and fixed)
+
+After R20 shipped, the user reported both problems were still present, and offered a specific
+diagnosis: they suspected the spacing problem was inherent to keeping `ink-canvas` blocks inline with
+the text at all, not a bug in how many blocks got created. Re-reading `insertAnnotationAfterParagraph`
+and `appendAtEnd` (`src/canvas/insert.ts`) with that framing confirmed it: **every single insertion**,
+even a single, correctly-merged annotation (R20 reduces the *count* of blocks, not the per-block
+overhead), added a blank line before the block and a blank line after it — by design
+(data-model.md/the `cv1` contract originally said so explicitly: "preceded and followed by a blank
+line"). The block-hiding `StateField` (`canvasAnnotationField`, R18) only ever decorates the fence's
+own lines (`ref.blockStart` to `ref.blockEnd` — opening fence through closing fence, never a line
+outside that range), so those blank lines were never hidden: they are permanent, real, visible vertical
+space in the rendered note, one annotation at a time. R20 helped (fewer blocks fragmenting one scribble
+means fewer *pairs* of blank lines), but never touched this per-block overhead, which is why the
+symptom persisted even after it.
+
+**Why the blank lines were there in the first place**: CommonMark does not actually require them. A
+fenced code block interrupts a paragraph, and is itself interrupted by the next block, without any
+blank line either side (e.g. `Foo\n\`\`\`\nbar\n\`\`\`` parses as paragraph "Foo" followed by a code
+block "bar" — a canonical CommonMark example). The blank-line padding was a stylistic choice made
+early in the design (contracts/canvas-annotation-format.md, data-model.md), not a Markdown necessity.
+
+**Fix**: `insertAnnotationAfterParagraph`/`appendAtEnd` no longer add any blank-line padding — the
+block is inserted directly adjacent to whatever text precedes/follows the insertion point, and
+whatever spacing already exists in the surrounding document (e.g. a normal blank line the user typed
+between two paragraphs) is left completely untouched. This required a matching fix in `chunkify`'s
+plain-paragraph scan, which previously only stopped at a blank line; without a preceding blank line to
+rely on, a fence directly adjacent to a paragraph would otherwise get swallowed into that paragraph's
+own chunk instead of being recognised as its own atomic block chunk (the same class of correctness gap
+R16 fixed for a different adjacency case). Test-first: `tests/unit/canvas/insert.test.ts` gained
+coverage for zero-padding insertion and for a fence directly adjacent to a paragraph with no blank
+line; all pre-existing tests were updated to the new (unpadded) expected output, and one integration
+test (`tests/integration/canvas/save-new-annotation.test.ts`) likewise. `data-model.md` and
+`contracts/canvas-annotation-format.md` updated to match — this is explicitly a "spike format...
+expected to be revisited" per that contract's own header, so this is not a frozen-format violation.
+
+- **Not yet on-device confirmed.** Typecheck, all 305 tests, and the build are clean.
+- **Takeaway**: this is the same shape as R20 — a design decision (here, "give the block its own
+  paragraph" from very early in the spec) that was never actually load-bearing (Markdown doesn't need
+  it) but was assumed without being questioned until an on-device report, and specifically until the
+  user reframed the question from "why is this insertion producing extra output" to "why does this
+  design need surrounding blank lines at all" — a genuinely different, more productive question than
+  the incremental bug-hunting R19/R20 were doing. Worth remembering: when a fix doesn't fully resolve a
+  reported symptom, the next step should include re-examining the *design premise*, not just looking
+  harder for another bug within the existing one.
+
 ## Future work: readable diffs for interspersed `ink-canvas` blocks (decision: git diff driver)
 
 Queued by the user, decided but not yet implemented: rather than relocating `ink-canvas` blocks in the

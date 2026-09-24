@@ -247,6 +247,23 @@ just overlapping) strokes merge into one annotation; a regression test covers th
 uses the same "already saved to disk" check `buildEntry()` uses. Typecheck, all 304 tests, and the
 build are clean. **Not yet on-device confirmed.**
 
+### On-device findings, round ten (both problems still present; user reframed the spacing question)
+
+The user reported both problems were still present, and offered their own diagnosis: they suspected
+the spacing problem was inherent to keeping `ink-canvas` blocks inline with the text, based on that
+being a past design decision — not necessarily a bug in how many blocks got created. That reframing
+was the key: every single block insertion, even a single correctly-merged annotation, added a blank
+line before and after it, by design — and the block-hiding decoration never covers those blank lines,
+only the fence itself, so they were always real, visible space. R20 reduced block *count* but never
+touched this per-block overhead. See research.md R21 for full detail, including why the blank lines
+were never actually required by Markdown in the first place.
+
+**Fix**: `insertAnnotationAfterParagraph`/`appendAtEnd` no longer add any blank-line padding at all;
+`chunkify` was fixed to match (a fence directly adjacent to a paragraph, no blank line, is now
+correctly recognised as its own chunk). Test-first, with `data-model.md` and the `cv1` format contract
+updated to match (explicitly a revisable spike format, not a frozen one). Typecheck, all 305 tests,
+and the build are clean. **Not yet on-device confirmed.**
+
 ### What was verified automatically
 
 ### What was verified automatically

@@ -4,13 +4,25 @@ import { insertAnnotationAfterParagraph, findInsertionPoint } from '../../../src
 const NEW_BLOCK = '```ink-canvas\ncv1;id=newnewnw;\n```\n';
 
 describe('insertAnnotationAfterParagraph', () => {
+	// No blank-line padding is added around the block at all (research.md
+	// R21): a fenced code block interrupts a paragraph, and is itself
+	// interrupted by the next one, without needing a blank line either side
+	// (CommonMark; the same rule the `ink`/`ink-canvas` fence relies on to be
+	// recognised as a block at all). The block-hiding StateField only ever
+	// covers the fence's own lines (research.md R4/R18), never any
+	// surrounding blank line, so every blank line this function used to add
+	// was permanently visible, real vertical space between paragraphs —
+	// reported on-device as "too many spaces between typed blocks."
+	// Whatever spacing already exists in the surrounding text (e.g. the
+	// normal blank line between two typed paragraphs) is left untouched;
+	// this function just never adds any of its own.
 	it('inserts right after the paragraph, before the next paragraph, given a position anywhere inside it', () => {
 		const text = 'para one line one\npara one line two\n\npara two\n';
 		const pos = text.indexOf('line two'); // inside the first paragraph, second line
 
 		const result = insertAnnotationAfterParagraph(text, pos, NEW_BLOCK);
 
-		expect(result).toBe('para one line one\npara one line two\n\n' + NEW_BLOCK + '\npara two\n');
+		expect(result).toBe('para one line one\npara one line two\n\n' + NEW_BLOCK + 'para two\n');
 	});
 
 	it('appends at the end of the file for a position on the last paragraph', () => {
@@ -19,13 +31,13 @@ describe('insertAnnotationAfterParagraph', () => {
 
 		const result = insertAnnotationAfterParagraph(text, pos, NEW_BLOCK);
 
-		expect(result).toBe('para one\n\npara two\n\n' + NEW_BLOCK);
+		expect(result).toBe('para one\n\npara two\n' + NEW_BLOCK);
 	});
 
 	it('appends at the end of a file with no trailing newline', () => {
 		const text = 'only paragraph';
 		const result = insertAnnotationAfterParagraph(text, 0, NEW_BLOCK);
-		expect(result).toBe('only paragraph\n\n' + NEW_BLOCK);
+		expect(result).toBe('only paragraph\n' + NEW_BLOCK);
 	});
 
 	it('inserts after an existing ink-canvas block that immediately follows the paragraph, not before it', () => {
@@ -35,7 +47,7 @@ describe('insertAnnotationAfterParagraph', () => {
 
 		const result = insertAnnotationAfterParagraph(text, pos, NEW_BLOCK);
 
-		expect(result).toBe('para one\n\n' + existing + '\n' + NEW_BLOCK + '\npara two\n');
+		expect(result).toBe('para one\n\n' + existing + '\n' + NEW_BLOCK + 'para two\n');
 	});
 
 	it('inserts after an existing ink block that immediately follows the paragraph, not before it', () => {
@@ -45,7 +57,7 @@ describe('insertAnnotationAfterParagraph', () => {
 
 		const result = insertAnnotationAfterParagraph(text, pos, NEW_BLOCK);
 
-		expect(result).toBe('para one\n\n' + existing + '\n' + NEW_BLOCK + '\npara two\n');
+		expect(result).toBe('para one\n\n' + existing + '\n' + NEW_BLOCK + 'para two\n');
 	});
 
 	it('leaves all other text byte-identical', () => {
@@ -54,7 +66,7 @@ describe('insertAnnotationAfterParagraph', () => {
 
 		const result = insertAnnotationAfterParagraph(text, pos, NEW_BLOCK);
 
-		expect(result.startsWith('intro\n\npara one\nmore text\n\n' + NEW_BLOCK + '\npara two')).toBe(true);
+		expect(result.startsWith('intro\n\npara one\nmore text\n\n' + NEW_BLOCK + 'para two')).toBe(true);
 		expect(result.endsWith('\n\nconclusion\n')).toBe(true);
 	});
 
@@ -64,7 +76,17 @@ describe('insertAnnotationAfterParagraph', () => {
 
 		const result = insertAnnotationAfterParagraph(text, pos, NEW_BLOCK);
 
-		expect(result).toBe('para one\r\n\r\n' + NEW_BLOCK + '\npara two\r\n');
+		expect(result).toBe('para one\r\n\r\n' + NEW_BLOCK + 'para two\r\n');
+	});
+
+	it('treats an ink-canvas block directly adjacent to a paragraph (no blank line) as its own chunk, not part of the paragraph', () => {
+		const existing = '```ink-canvas\ncv1;id=aaaaaaaa;\n```\n';
+		const text = 'para one\n' + existing + 'para two\n';
+		const pos = text.indexOf('para one');
+
+		const result = insertAnnotationAfterParagraph(text, pos, NEW_BLOCK);
+
+		expect(result).toBe('para one\n' + existing + NEW_BLOCK + 'para two\n');
 	});
 
 	// research.md R16: a non-ink fence (any other language) must be treated as
@@ -83,7 +105,7 @@ describe('insertAnnotationAfterParagraph', () => {
 		// annotation lands after it (before "end"), not inside it.
 		expect(result).toContain(code);
 		expect(result.indexOf(code) + code.length).toBeLessThanOrEqual(result.indexOf(NEW_BLOCK));
-		expect(result).toBe('intro\n\n' + code + '\n' + NEW_BLOCK + '\nend\n');
+		expect(result).toBe('intro\n\n' + code + '\n' + NEW_BLOCK + 'end\n');
 	});
 
 	it('still inserts right after a paragraph that precedes an unrelated code fence with a blank line in it', () => {
@@ -93,7 +115,7 @@ describe('insertAnnotationAfterParagraph', () => {
 
 		const result = insertAnnotationAfterParagraph(text, pos, NEW_BLOCK);
 
-		expect(result).toBe('intro\n\n' + NEW_BLOCK + '\n' + code + '\nend\n');
+		expect(result).toBe('intro\n\n' + NEW_BLOCK + code + '\nend\n');
 	});
 });
 

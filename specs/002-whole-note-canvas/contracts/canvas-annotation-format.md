@@ -14,9 +14,14 @@ cv1;id=k3f9x2ab;<base64 payload>
 ```
 ````
 
-An annotation with no strokes yet is `cv1;id=k3f9x2ab;` (empty payload). The block is placed as its
-own paragraph (preceded and followed by a blank line) immediately after the text paragraph it is
-anchored to (data-model.md's Anchor section). It is never shown to the user as raw text in Live
+An annotation with no strokes yet is `cv1;id=k3f9x2ab;` (empty payload). The block is placed
+immediately after the text paragraph it is anchored to (data-model.md's Anchor section), with **no
+blank line before or after** — a fenced code block interrupts a paragraph, and is itself interrupted
+by the next one, without needing one (CommonMark; revised from the original "preceded and followed by
+a blank line" design after research.md R21 found that every such blank line was permanently visible,
+real vertical space, since the block-hiding decoration only ever covers the fence's own lines, never
+a surrounding blank line). Whatever spacing already exists in the surrounding text is left untouched;
+insertion never adds blank-line padding of its own. It is never shown to the user as raw text in Live
 Preview (research.md R4) — this grammar only matters for storage and for anyone reading the raw
 Markdown outside Obsidian.
 

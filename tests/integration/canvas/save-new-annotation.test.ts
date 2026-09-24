@@ -18,7 +18,7 @@ describe('saveNewAnnotation', () => {
 		const outcome = await saveNewAnnotation(vault, { path }, pos, blockMarkdown);
 
 		expect(outcome).toEqual({ kind: 'updated' });
-		expect(vault.read(path)).toBe('intro\n\npara one\n\n' + blockMarkdown + '\npara two\n');
+		expect(vault.read(path)).toBe('intro\n\npara one\n\n' + blockMarkdown + 'para two\n');
 	});
 
 	it('returns file-missing when the file no longer exists', async () => {

@@ -79,19 +79,33 @@ function chunkify(text: string, lines: Line[]): Chunk[] {
 			continue;
 		}
 
+		// Stops at a blank line *or* the start of a fence, whichever comes
+		// first — a fence interrupts a paragraph in CommonMark without
+		// needing a blank line before it (the same rule this module relies
+		// on to omit blank-line padding around its own inserted blocks,
+		// research.md R21). Without this, a fence directly adjacent to a
+		// paragraph (no blank line) would be swallowed into this same
+		// paragraph chunk instead of being recognised as its own chunk on
+		// the outer loop's next iteration.
 		let j = i;
-		while (j < lines.length && !isBlank(text, lines[j] as Line)) j += 1;
+		while (j < lines.length) {
+			const jLine = lines[j] as Line;
+			if (isBlank(text, jLine)) break;
+			if (FENCE_RE.test(text.slice(jLine.start, jLine.end).trim())) break;
+			j += 1;
+		}
 		chunks.push({ kind: 'paragraph', startLine: i, endLine: j - 1 });
 		i = j;
 	}
 	return chunks;
 }
 
+// No blank-line padding (research.md R21): only ensures the block starts on
+// its own line, never that it's preceded by a blank one.
 function appendAtEnd(text: string, blockMarkdown: string): string {
 	if (text.length === 0) return blockMarkdown;
-	if (text.endsWith('\n\n') || text.endsWith('\r\n\r\n')) return text + blockMarkdown;
-	if (text.endsWith('\n')) return text + '\n' + blockMarkdown;
-	return text + '\n\n' + blockMarkdown;
+	if (text.endsWith('\n')) return text + blockMarkdown;
+	return text + '\n' + blockMarkdown;
 }
 
 // The character offset right after the paragraph containing/nearest-before
@@ -131,16 +145,22 @@ export function findInsertionPoint(text: string, pos: number): number {
 	return (lines[(chunks[nextIndex] as Chunk).startLine] as Line).start;
 }
 
-// Inserts blockMarkdown as its own paragraph (blank line before and after)
-// right after the paragraph containing/nearest-before `pos`, and after any
-// "ink"/"ink-canvas" blocks that already immediately trail that paragraph —
-// so a note's annotations accumulate in drawing order rather than being
-// inserted ahead of ones already there (data-model.md "New annotation" save
-// flow).
+// Inserts blockMarkdown as its own fenced block right after the paragraph
+// containing/nearest-before `pos`, and after any "ink"/"ink-canvas" blocks
+// that already immediately trail that paragraph — so a note's annotations
+// accumulate in drawing order rather than being inserted ahead of ones
+// already there (data-model.md "New annotation" save flow). No blank line is
+// added before or after: a fenced code block interrupts a paragraph, and is
+// itself interrupted by the next one, without needing one (CommonMark) —
+// and since the block-hiding StateField only ever covers the fence's own
+// lines (research.md R4/R18), every blank line this function used to add was
+// permanently visible space between paragraphs (research.md R21). Whatever
+// spacing already exists in the surrounding text is left untouched; this
+// function never adds any of its own.
 export function insertAnnotationAfterParagraph(text: string, pos: number, blockMarkdown: string): string {
 	const insertOffset = findInsertionPoint(text, pos);
 	if (insertOffset >= text.length) {
 		return appendAtEnd(text, blockMarkdown);
 	}
-	return text.slice(0, insertOffset) + blockMarkdown + '\n' + text.slice(insertOffset);
+	return text.slice(0, insertOffset) + blockMarkdown + text.slice(insertOffset);
 }
