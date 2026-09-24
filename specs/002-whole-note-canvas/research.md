@@ -490,6 +490,56 @@ evidence from the user to make real progress, rather than another speculative fi
   non-trivial-height widget near a canvas annotation (an image embed, say) or specifically only with a
   Block Mode `ink` block.
 
+## R18. Root cause of both "still open" items: block decorations provided via a `ViewPlugin` (found and fixed)
+
+The user captured real Safari Web Inspector console output (via Remote Control on the Mac, attached
+to the iPad session) for the first time, per R14/R17's "next step." Among Obsidian's own unrelated
+noise, one line was a genuine CodeMirror 6 error: `RangeError: Block decorations may not be specified
+via plugins`.
+
+That string is thrown by `@codemirror/view`'s own range-builder (`node_modules/@codemirror/view/dist/index.js`,
+the `point()` method's `disallowBlockEffectsFor` check) whenever a decoration with `block: true` is
+supplied by a `ViewPlugin`'s `decorations` facet rather than a `StateField`'s. That is exactly what
+`src/canvas/view-plugin.ts` did: `canvasAnnotationViewPlugin` was a `ViewPlugin.fromClass(...,
+{ decorations: (v) => v.decorations })`, and `computeAnnotationDecorations` (R4) returns
+`Decoration.replace({ widget, block: true })` for every `ink-canvas` block. CM6 requires block-level
+decorations to come from a `StateField` specifically so they're computed as part of the same state
+transaction the rest of layout uses — a `ViewPlugin` only sees the already-committed state a step
+later, which is exactly the ordering guarantee block decorations depend on. This throws, uncaught,
+inside CM6's own render pipeline the moment any `ink-canvas` block is inside the range CM6 is building
+content for — i.e. any time a canvas annotation is on-screen or about to scroll into view.
+
+This single bug plausibly explains both remaining "still open" items at once:
+- **The reopen failure**: reopening a note whose visible range includes an `ink-canvas` block would hit
+  this throw during the editor's own render pass, which is a very plausible mechanism for Obsidian's
+  generic "failed to open" error (a rendering exception during view construction, not a data/file
+  problem — consistent with R14's file-integrity check finding the Markdown itself intact).
+- **The progressive scroll-jump ("ink/ink-canvas adjacency")**: each scroll that brought an
+  `ink-canvas` block into the building range would hit the same throw, aborting that render pass
+  partway through — a very plausible source of a layout left in a partially-corrected state, which
+  compounds on each subsequent scroll (matching the "worse after each scroll" description) far more
+  directly than either of the "still open" section's two speculative hypotheses (widget height
+  remeasurement, or `coordsAtPos` boundary ambiguity), neither of which is a hard CM6 error at all.
+
+**Fix**: `canvasAnnotationViewPlugin` (a `ViewPlugin`) replaced with `canvasAnnotationField` (a
+`StateField<DecorationSet>`, `provide: (f) => EditorView.decorations.from(f)`), wired into `main.ts`'s
+`registerEditorExtension` in its place. `computeAnnotationDecorations` itself (the tested, pure
+function) is unchanged — only how its result reaches CM6 changed, which is why this required no new
+test (existing `computeAnnotationDecorations` unit tests already cover the pure logic; the StateField
+wrapper is glue per constitution v1.1.0, the same category as the ViewPlugin it replaces).
+
+- **Not yet on-device confirmed.** Typecheck, all 303 tests, and the build are clean. This needs the
+  same repro (a note with a Block Mode `ink` block near a Canvas Mode `ink-canvas` annotation, Canvas
+  Mode on, scroll repeatedly; then close and reopen) re-run on-device to confirm the `RangeError` no
+  longer appears in the console and both symptoms are actually gone, not just plausibly explained.
+- **Takeaway**: this is the first of the "still open" investigation's leads that came from actual
+  console output rather than static-analysis guessing, and it found a real, deterministic, always-
+  reproducible-once-triggered bug — a sharp contrast with R12–R17's glue-timing races, which were each
+  probabilistic/order-dependent. Worth remembering for next time: a `ViewPlugin` must never supply a
+  `block: true` decoration; if a future feature needs a block-level widget from view-derived state
+  (not just document state), it needs to launder that state through a `StateField` (e.g. by dispatching
+  an effect) rather than returning it directly from the plugin's `decorations` facet.
+
 ## Future work: readable diffs for interspersed `ink-canvas` blocks (decision: git diff driver)
 
 Queued by the user, decided but not yet implemented: rather than relocating `ink-canvas` blocks in the

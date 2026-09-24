@@ -194,6 +194,24 @@ for the reopen error; a screenshot or git diff, plus which of three possible mea
 refers to, for the adjacency issue). Checklist item 11 (Block Mode/Canvas Mode coexistence) is now the
 most relevant unchecked item given the adjacency clue.
 
+### On-device findings, round seven (root cause found from real console output: block decorations via a ViewPlugin)
+
+The user captured actual Safari Web Inspector console output for the first time (via Remote Control
+attached to the iPad session), which is exactly what round six said was needed. Among it was a genuine
+CodeMirror 6 error: `RangeError: Block decorations may not be specified via plugins`. Traced to
+`src/canvas/view-plugin.ts`: `canvasAnnotationViewPlugin` supplied `Decoration.replace({ ...,
+block: true })` from a `ViewPlugin`'s `decorations` facet, which CM6 disallows outright — block
+decorations must come from a `StateField`. This throws, uncaught, inside CM6's own render pipeline
+any time an `ink-canvas` block is in the range being built, which plausibly explains **both** open
+items at once: the reopen failure (a render-pass exception during editor construction) and the
+progressive scroll-jump (each scroll that builds an `ink-canvas` block's range hits the same throw,
+aborting that render pass and compounding on the next scroll). See research.md R18 for full detail.
+
+**Fix**: replaced with `canvasAnnotationField`, a `StateField<DecorationSet>` wired the same way,
+reusing the same tested `computeAnnotationDecorations` function unchanged. Typecheck/tests/build clean.
+**Not yet on-device confirmed** — needs the same repro re-run to confirm the `RangeError` is gone and
+both symptoms are actually resolved.
+
 ### What was verified automatically
 
 ### What was verified automatically

@@ -37,6 +37,8 @@ export class CanvasLivePluginInstance {
 			heightChanged: update.heightChanged,
 			viewportChanged: update.viewportChanged,
 			viewportMoved: update.viewportMoved,
+			scrollHeight: update.view.scrollDOM.scrollHeight,
+			scrollTop: update.view.scrollDOM.scrollTop,
 		});
 		try {
 			this.session.onLayoutChanged();

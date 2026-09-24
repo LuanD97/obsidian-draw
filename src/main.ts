@@ -4,7 +4,7 @@ import { renderInkBlock } from './obsidian/preview-processor';
 import { createInsertCommand } from './obsidian/insert-command';
 import { openEditorFlow } from './obsidian/flows';
 import { openOverlay, type OverlayHandle } from './editor/overlay';
-import { canvasAnnotationViewPlugin } from './canvas/view-plugin';
+import { canvasAnnotationField } from './canvas/view-plugin';
 import { canvasLiveViewPlugin, getCanvasSession, type CanvasLivePluginInstance } from './canvas/live-plugin';
 import { CanvasModeSession } from './canvas/live-session';
 import { isCanvasModeEnabled, setCanvasModeEnabled } from './canvas/frontmatter';
@@ -57,11 +57,11 @@ export default class DrawPlugin extends Plugin {
 			}),
 		);
 
-		// canvasAnnotationViewPlugin (hides raw ink-canvas block source) is
+		// canvasAnnotationField (hides raw ink-canvas block source) is
 		// unconditional, for every note, per research.md R4. canvasLiveViewPlugin
 		// only ever does anything once this.activateCanvasSession gives it a
 		// session (contracts/canvas-mode-toggle.md "Activation scope").
-		this.registerEditorExtension([canvasAnnotationViewPlugin, canvasLiveViewPlugin]);
+		this.registerEditorExtension([canvasAnnotationField, canvasLiveViewPlugin]);
 
 		this.addCommand({
 			id: 'toggle-canvas-mode',

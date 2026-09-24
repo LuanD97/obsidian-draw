@@ -159,6 +159,8 @@ export class CanvasModeSession {
 		debugLog('onLayoutChanged (geometryChanged fired)', {
 			scrollTop: this.deps.view.scrollDOM.scrollTop,
 			scrollLeft: this.deps.view.scrollDOM.scrollLeft,
+			scrollHeight: this.deps.view.scrollDOM.scrollHeight,
+			clientHeight: this.deps.view.scrollDOM.clientHeight,
 		});
 		this.loadStatic();
 		this.resizeAndRedraw();
