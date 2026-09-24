@@ -227,6 +227,26 @@ ahead of the write. See research.md R19 for full detail.
 not at flush time; `deactivateCanvasSession()` is now `async` and awaited by every caller.
 Typecheck/tests/build clean. **Not yet on-device confirmed.**
 
+### On-device findings, round nine (still not persisting, plus new symptom: too much blank space)
+
+The user reported the persistence symptom was still present after R19, plus a new one: drawing
+scribbles was visibly inserting too much blank space between typed paragraphs. Root-caused to
+`CanvasModeNoteState.resolveTarget()`: its exact bounding-box containment test for "does this new
+stroke continue an existing annotation" is far stricter than real handwriting, where consecutive
+letters/strokes routinely don't overlap at all. Every non-overlapping stroke started a brand new
+annotation, each becoming its own `ink-canvas` block with its own blank-line padding — a single
+handwritten word could fragment into a dozen+ separate annotations, each visibly widening the gap
+between surrounding paragraphs, and plausibly corrupting the save batch (many independently-captured,
+now-stale insertion offsets in one `vault.process` call) badly enough to explain the persistence
+failure too. A second, unrelated regression from R19's own anchor-caching fix was also found and fixed:
+`onPenEnd()` and `buildEntry()` used two different definitions of "is this annotation new." See
+research.md R20 for full detail.
+
+**Fix**: `containsPoint()` now expands the bounding-box test by a 40px proximity margin, so nearby (not
+just overlapping) strokes merge into one annotation; a regression test covers this. `onPenEnd()` now
+uses the same "already saved to disk" check `buildEntry()` uses. Typecheck, all 304 tests, and the
+build are clean. **Not yet on-device confirmed.**
+
 ### What was verified automatically
 
 ### What was verified automatically

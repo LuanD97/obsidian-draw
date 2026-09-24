@@ -595,6 +595,64 @@ awaited changed, not what gets computed or written).
   `coordsAtPos`/`posAtCoords` should ask *when this actually runs* relative to the view's lifecycle,
   not just whether the call can return `null`.
 
+## R20. Strict stroke-bounds containment fragmented ordinary handwriting into many annotations (found and fixed)
+
+After R19 shipped, the user reported the same "not persisted" symptom was still present, plus a new
+one: drawing Canvas Mode scribbles was visibly inserting too much blank space between typed paragraphs.
+The desktop dev machine's vault clone (`~/Documents/obsidian-personal`, the same git repo that syncs to
+the iPad via Obsidian Git) had no `canvas-mode`/`ink-canvas` content anywhere in its history, ruling out
+inspecting an actual saved file for this round and pointing back at code review.
+
+Both symptoms traced to `CanvasModeNoteState.resolveTarget()`/`containsPoint()` in `src/canvas/session.ts`,
+which decides whether a new stroke continues an existing annotation or starts a new one. Its rule —
+also data-model.md's own original wording — was **exact bounding-box containment**: a new pen-down had
+to land literally inside the union of an existing annotation's strokes' bounding boxes to be grouped
+with it. That's far stricter than real handwriting needs: a word written letter by letter (or a letter
+drawn as several separate pen-lifts) routinely has consecutive strokes whose bounding boxes don't
+overlap *at all* — e.g. the gap between two letters — despite being unambiguously "the same scribble" to
+a person looking at it. Every such non-overlapping stroke started a brand new annotation, each of which
+became its own separate `ink-canvas` block on save, each with its own blank-line padding
+(`insert.ts`'s `insertAnnotationAfterParagraph`) — visibly growing the gap between the surrounding typed
+paragraphs with every additional letter, which is exactly the "too many spaces" symptom.
+
+This also plausibly explains (part of) the persistence symptom, independent of R19's fixes: many
+separate new-annotation ids becoming dirty in the same debounce window means a single
+`saveDirtyAnnotations()` batch could contain several `entry.pos !== null` (insert) entries whose offsets
+were each captured independently, earlier, against the pre-batch text — inserting them one after another
+inside one `vault.process` shifts the document out from under any not-yet-processed entry's stale
+offset. A large enough batch of these (an entire fragmented word, easily a dozen+ annotations) makes a
+resulting corrupted/nonsensical insertion far more likely than the one-or-two-new-annotations-per-batch
+case the design was reasoned about for.
+
+**Fix**: `containsPoint()` now expands the existing annotation's bounding box by a fixed
+`ANNOTATION_MERGE_MARGIN` (40 overlay-space px, i.e. roughly CSS px) in every direction before testing
+containment — generous enough to bridge a letter-to-letter or word-to-word gap, while staying well short
+of the distance between a margin annotation and the text column or between separate lines. Regression
+test added (`tests/unit/canvas/session.test.ts`): a stroke landing 15px outside an existing annotation's
+bounds (simulating the next letter of a word) now joins it instead of starting a new one, while the
+existing far-away (500px) test still starts a new annotation. `data-model.md`'s "New annotation"/
+"Existing annotation" wording updated to match.
+
+A second, unrelated regression from R19's own fix was also found and fixed while reviewing this code
+path: `onPenEnd()`'s eager anchor-caching (added in R19) determined "is this annotation new" from
+whether the id already existed in `this.state.annotations` (session-memory presence), while
+`buildEntry()` determines it from `this.knownIds` (has it ever actually been *saved to disk*) — two
+different questions. For a not-yet-saved annotation's second-and-later strokes, the mismatch made
+`onPenEnd()` call `currentAnchorOffsetForKnown()` (which scans the file for a block that doesn't exist
+yet there, falling back to end-of-document) instead of reusing the correctly-cached `newAnchorOffset`,
+caching a wrong anchor pixel position for that id. Fixed by making `onPenEnd()` use the same
+`this.knownIds.has(id)` check `buildEntry()` uses.
+
+- **Not yet on-device confirmed.** Typecheck, all 304 tests (303 + the new regression test), and the
+  build are clean.
+- **Takeaway**: this is the same shape as R5 (spec 001's RDP simplification) and R9 — a design decision
+  that looked reasonable on paper but didn't hold up against how people actually draw/write on a device,
+  only found from an on-device report, not from code review or the automated suite (which only ever
+  tested points that were either clearly inside or implausibly far away, never the realistic "close but
+  not touching" case). Any future proximity/grouping heuristic over hand-drawn input in this codebase
+  should default to a margin, not exact containment, unless there's a specific reason strokes must
+  physically touch to be considered related.
+
 ## Future work: readable diffs for interspersed `ink-canvas` blocks (decision: git diff driver)
 
 Queued by the user, decided but not yet implemented: rather than relocating `ink-canvas` blocks in the

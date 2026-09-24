@@ -74,15 +74,16 @@ Reuses spec 001's save-state machine (`EditingSession`'s `clean → dirty → sa
 including `orphaned` on `not-found`/`duplicate`/`file-missing`), applied per annotation id instead
 of once per session:
 
-- **New annotation** (pen-down outside any existing annotation's stroke bounds): on first commit,
-  `src/canvas/insert.ts`'s `insertAnnotationAfterParagraph(text, pos, blockMarkdown)` finds the end
-  of the paragraph containing/nearest-before the pen-down position in the *current* file text and
-  inserts a blank line plus the new block — never trusting a stale position captured when Canvas
-  Mode was turned on.
-- **Existing annotation** (pen-down within an existing annotation's stroke bounds, or continuing one
-  mid-gesture): `src/canvas/update.ts`'s `applyAnnotationUpdate` locates it fresh by id via
-  `locateAnnotation` and replaces only its payload line, byte-identical elsewhere — the same
-  guarantee spec 001 tests for `applyBlockUpdate`.
+- **New annotation** (pen-down outside every existing annotation's stroke bounds, expanded by a
+  40px proximity margin — see `ANNOTATION_MERGE_MARGIN` in `src/canvas/session.ts` and research.md
+  R20): on first commit, `src/canvas/insert.ts`'s `insertAnnotationAfterParagraph(text, pos,
+  blockMarkdown)` finds the end of the paragraph containing/nearest-before the pen-down position in
+  the *current* file text and inserts a blank line plus the new block — never trusting a stale
+  position captured when Canvas Mode was turned on.
+- **Existing annotation** (pen-down within an existing annotation's stroke bounds *or* its 40px
+  merge margin, or continuing one mid-gesture): `src/canvas/update.ts`'s `applyAnnotationUpdate`
+  locates it fresh by id via `locateAnnotation` and replaces only its payload line, byte-identical
+  elsewhere — the same guarantee spec 001 tests for `applyBlockUpdate`.
 - **Orphaned** (id not found, or duplicated, at save time — e.g., another device deleted or
   duplicated the block via sync): surfaces the same kind of recoverable notice Block Mode shows,
   scoped to that one annotation; other annotations in the note continue saving normally.

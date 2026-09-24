@@ -25,13 +25,36 @@ describe('CanvasModeNoteState add-stroke path', () => {
 		expect(state.annotations.get(firstId)!.strokes).toHaveLength(2);
 	});
 
-	it('creates a second annotation for a pen-down point outside the first annotation bounds', () => {
+	it('creates a second annotation for a pen-down point far outside the first annotation bounds', () => {
 		const state = new CanvasModeNoteState();
 		const firstId = state.addStroke(stroke({ x: 10, y: 10 }, { x: 20, y: 20 }));
 		const secondId = state.addStroke(stroke({ x: 500, y: 500 }, { x: 510, y: 510 }));
 
 		expect(secondId).not.toBe(firstId);
 		expect(state.annotations.size).toBe(2);
+	});
+
+	// Real handwriting is a sequence of separate pen-lifts (one per letter, or
+	// per pen stroke within a letter) whose bounding boxes routinely don't
+	// overlap at all even though they're clearly meant as one continuous
+	// scribble — e.g. the gap between two letters in a word. Strict
+	// containment (the previous test, and data-model.md's original "pen-down
+	// outside any existing annotation's stroke bounds" wording) fragmented an
+	// ordinary handwritten word into one ink-canvas block per letter, each
+	// with its own blank-line padding (research.md R20) — reported on-device
+	// as "too many spaces between typed blocks." resolveTarget must treat a
+	// pen-down within a generous proximity margin of an existing annotation's
+	// bounds as continuing it, not just one landing strictly inside.
+	it('appends to an existing annotation when the pen-down point is near but outside its stroke bounds (next letter of a word)', () => {
+		const state = new CanvasModeNoteState();
+		const firstId = state.addStroke(stroke({ x: 10, y: 10 }, { x: 20, y: 20 }));
+		// 15px past the first stroke's right edge (x=20) — a typical
+		// letter-to-letter gap, well short of ANNOTATION_MERGE_MARGIN.
+		const secondId = state.addStroke(stroke({ x: 35, y: 12 }, { x: 40, y: 18 }));
+
+		expect(secondId).toBe(firstId);
+		expect(state.annotations.size).toBe(1);
+		expect(state.annotations.get(firstId)!.strokes).toHaveLength(2);
 	});
 
 	it('pushes one undoLedger entry per commit, naming the touched annotation id', () => {

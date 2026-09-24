@@ -403,16 +403,28 @@ export class CanvasModeSession {
 		const wasKnown = new Set(this.state.annotations.keys());
 		const id = this.state.addStroke(raw);
 
-		const isNew = !wasKnown.has(id);
-		let anchorOffset: number;
-		if (isNew) {
+		// Only computed (and cached) on the very first stroke of a brand new
+		// annotation, exactly like before this comment's fix — every later
+		// stroke to the same not-yet-saved annotation must keep reusing that
+		// same cached value rather than recomputing it, since no block for
+		// this id exists in the file yet for currentAnchorOffsetForKnown to
+		// find.
+		if (!wasKnown.has(id)) {
 			const text = this.deps.view.state.doc.toString();
 			const penDownOffset = this.posAtOverlayPoint(raw[0] as RawPoint) ?? text.length;
-			anchorOffset = findInsertionPoint(text, penDownOffset);
-			this.newAnchorOffset.set(id, anchorOffset);
-		} else {
-			anchorOffset = this.currentAnchorOffsetForKnown(id);
+			this.newAnchorOffset.set(id, findInsertionPoint(text, penDownOffset));
 		}
+		// Mirrors buildEntry()'s own anchorOffset computation exactly (same
+		// this.knownIds.has(id) check — whether this id has ever actually been
+		// written to the file, not just whether it exists in this session's
+		// in-memory state, which wasKnown above tracks instead and is a
+		// different, easily-confused question): a not-yet-saved annotation's
+		// second-and-later strokes must still resolve via the cached
+		// newAnchorOffset, not currentAnchorOffsetForKnown (which would find
+		// no block yet and fall back to the wrong, end-of-document offset).
+		const anchorOffset = this.knownIds.has(id)
+			? this.currentAnchorOffsetForKnown(id)
+			: (this.newAnchorOffset.get(id) ?? this.deps.view.state.doc.length);
 		// Resolved and cached right here, while the pen has just lifted and the
 		// view is guaranteed live/attached — never at the later, debounced (or
 		// session-teardown-triggered) flush, whose timing relative to the view

@@ -12,6 +12,21 @@ import type { Annotation } from './annotation-line';
 // for storage is computed at save time, outside this module (research.md R3).
 const SANITY_BOUND = 1_000_000;
 
+// How far outside an existing annotation's exact stroke bounds a new
+// pen-down still counts as "continuing" it, rather than starting a fresh
+// annotation. Real handwriting is a sequence of separate pen-lifts (one per
+// letter, or per stroke within a letter) whose bounding boxes routinely
+// don't touch at all despite being clearly one continuous scribble — a
+// strict containment test (data-model.md's original "pen-down outside any
+// existing annotation's stroke bounds" wording) fragmented an ordinary
+// handwritten word into one ink-canvas block per letter, each padded with
+// its own blank line, which is what read on-device as "too many spaces
+// between typed blocks" (research.md R20). 40 (overlay-space pixels, i.e.
+// roughly CSS px) comfortably bridges a letter-to-letter or word-to-word gap
+// while staying well short of the distance between a margin annotation and
+// the text column, or between separate lines of text.
+const ANNOTATION_MERGE_MARGIN = 40;
+
 function toDrawing(a: Annotation): Drawing {
 	return { version: 1, id: a.id, width: 0, height: 0, strokes: a.strokes };
 }
@@ -22,11 +37,18 @@ function fromDrawing(d: Drawing): Annotation {
 
 // Whether `at` falls inside the union of all of the annotation's strokes'
 // bounding boxes (model/erase.ts's boundingBox logic, reused unchanged, per
-// research.md R10).
+// research.md R10), expanded by ANNOTATION_MERGE_MARGIN in every direction
+// (research.md R20) so a new pen-down close to, but not literally touching,
+// an existing annotation still continues it.
 function containsPoint(strokes: Stroke[], at: { x: number; y: number }): boolean {
 	const box = strokesBoundingBox(strokes);
 	if (!box) return false;
-	return at.x >= box.minX && at.x <= box.maxX && at.y >= box.minY && at.y <= box.maxY;
+	return (
+		at.x >= box.minX - ANNOTATION_MERGE_MARGIN &&
+		at.x <= box.maxX + ANNOTATION_MERGE_MARGIN &&
+		at.y >= box.minY - ANNOTATION_MERGE_MARGIN &&
+		at.y <= box.maxY + ANNOTATION_MERGE_MARGIN
+	);
 }
 
 export interface CanvasModeNoteStateDeps {
