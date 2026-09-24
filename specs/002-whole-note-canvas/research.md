@@ -540,6 +540,61 @@ wrapper is glue per constitution v1.1.0, the same category as the ViewPlugin it 
   (not just document state), it needs to launder that state through a `StateField` (e.g. by dispatching
   an effect) rather than returning it directly from the plugin's `decorations` facet.
 
+## R19. Canvas Mode annotations not persisted across close/reopen (found and fixed)
+
+After R18 shipped, the user confirmed the scroll-jump stopped, but reported a new (or previously
+masked) symptom: drawing a Canvas Mode annotation, then moving away from the note's tab, closing it,
+and reopening it, the annotation was simply gone — never written to the file. Block Mode `ink` blocks,
+saved from the same note in the same session, persisted fine. This narrowed it to something specific
+to Canvas Mode's save path, not the underlying `vault.process`/id-lookup machinery both features share.
+
+Two real, compounding bugs were found by inspection of `CanvasModeSession`'s save path
+(`src/canvas/live-session.ts`) and its caller (`src/main.ts`):
+
+- **The anchor pixel position was resolved too late.** `buildEntry()` — called from `flushDirty()`,
+  which runs either on the 500ms debounce or from `CanvasModeSession.destroy()`'s awaited
+  `queue.flush()` — called `resolveAnchorPoint()` (a `view.coordsAtPos()` call) at *flush* time to
+  convert a stroke's absolute overlay-space coordinates into the anchor-relative form the file format
+  stores (research.md R3). But `destroy()` runs exactly when a note's tab is being switched away from
+  or closed — i.e., exactly when the EditorView `coordsAtPos()` needs may already be mid-teardown or
+  detached from a live layout. A `null` result there was already handled (falling back to anchor
+  `{x:0,y:0}`, i.e., a *wrong* save, not a lost one) — but `coordsAtPos()` on a torn-down view is not
+  guaranteed to return `null` cleanly; if it throws instead, that exception propagates out of
+  `buildEntry()`'s `Array.map()` inside `flushDirty()`, rejecting the whole flush *before*
+  `saveDirtyAnnotations()` — and therefore `vault.process()` — ever runs, silently dropping every dirty
+  annotation in that batch. The rejection was already caught (by `deactivateCanvasSession()`'s
+  `.catch()`, logged), so nothing crashed — it just silently lost the drawing, which matches "not
+  persisted" far more precisely than a merely-mispositioned save would.
+  **Fix**: resolve and cache the anchor immediately in `onPenEnd()`, when the pen has just lifted and
+  the view is guaranteed live and focused, instead of leaving it to whenever the flush happens to run
+  later. `buildEntry()` now reads this cache first, falling back to a live `resolveAnchorPoint()` call
+  only for the should-be-unreachable case of a dirty id with no cached anchor. This removes the save
+  path's dependency on the view still being attached at flush time entirely, the same "resolve
+  view-derived values only when the view is known-good, never speculatively later" lesson R15 already
+  drew for the *render* path, now applied to the *save* path too.
+- **`deactivateCanvasSession()` didn't wait for its own flush.** It called `session.destroy()` (which
+  internally awaits the pending save) but never awaited that promise itself — a fire-and-forget
+  `.then()/.catch()` — so `syncCanvasSession()` (called synchronously from `active-leaf-change`/
+  `file-open`) immediately went on to decide whether to activate a session for whatever note was now
+  active, without the previous note's write necessarily having landed yet. For a fast close-then-reopen
+  of the *same* note, this meant the new session's `loadStatic()` could read the file before the old
+  session's `vault.process()` write to it had completed. **Fix**: `deactivateCanvasSession()` is now
+  `async` and awaited by every caller (`syncCanvasSession()`, `toggleCanvasMode()`), so the previous
+  note's save is guaranteed to have settled before the next decision is made; `onunload()` remains the
+  one best-effort exception, since Obsidian doesn't await it.
+
+Both fixes are typecheck/test/build-clean (303 tests unchanged, since this area is glue with the
+transform logic itself unchanged — only *when* the anchor is resolved and *whether* deactivation is
+awaited changed, not what gets computed or written).
+
+- **Not yet on-device confirmed.** Needs the same repro (draw a Canvas Mode annotation, switch tabs,
+  close, reopen) re-run to confirm the annotation survives.
+- **Takeaway**: this is the same "a view-derived value must be captured when the view is known to be
+  live, never resolved speculatively at some later, uncertain time" lesson as R15 (render) and R18
+  (decorations), now found a third time on the save path. Any future code in this area that touches
+  `coordsAtPos`/`posAtCoords` should ask *when this actually runs* relative to the view's lifecycle,
+  not just whether the call can return `null`.
+
 ## Future work: readable diffs for interspersed `ink-canvas` blocks (decision: git diff driver)
 
 Queued by the user, decided but not yet implemented: rather than relocating `ink-canvas` blocks in the

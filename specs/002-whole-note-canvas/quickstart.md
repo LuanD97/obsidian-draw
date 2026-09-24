@@ -212,6 +212,21 @@ reusing the same tested `computeAnnotationDecorations` function unchanged. Typec
 **Not yet on-device confirmed** — needs the same repro re-run to confirm the `RangeError` is gone and
 both symptoms are actually resolved.
 
+### On-device findings, round eight (scroll-jump confirmed fixed; new persistence bug found)
+
+The user confirmed the scroll-jump stopped after R18's fix. But a new (or previously masked) symptom
+showed up: drawing a Canvas Mode annotation, then moving away from the note's tab, closing it, and
+reopening it, the annotation was gone — never saved — while Block Mode `ink` blocks in the same note
+persisted fine. Two compounding bugs found by inspection: `buildEntry()`'s anchor-pixel resolution ran
+too late (at flush time, which can be mid-teardown of the view, per `destroy()`'s call site), risking
+an uncaught throw that silently dropped the whole save batch before `vault.process()` ever ran; and
+`deactivateCanvasSession()` never awaited its own flush, so a fast reopen of the same note could race
+ahead of the write. See research.md R19 for full detail.
+
+**Fix**: the anchor is now resolved and cached in `onPenEnd()` (while the view is guaranteed live),
+not at flush time; `deactivateCanvasSession()` is now `async` and awaited by every caller.
+Typecheck/tests/build clean. **Not yet on-device confirmed.**
+
 ### What was verified automatically
 
 ### What was verified automatically

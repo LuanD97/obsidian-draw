@@ -89,6 +89,11 @@ export class CanvasModeSession {
 	// per not-yet-saved new id, the findInsertionPoint offset its first save
 	// will insert at (and the offset its strokes are stored relative to).
 	private readonly newAnchorOffset = new Map<string, number>();
+	// The anchor pixel position each dirty id's strokes should be saved
+	// relative to, resolved once at onPenEnd() while the view is guaranteed
+	// live and cached here for buildEntry() to use later — see onPenEnd()'s
+	// comment for why resolving it lazily at flush time isn't safe.
+	private readonly savedAnchor = new Map<string, { x: number; y: number }>();
 
 	private staticAnnotations: StaticAnnotation[] = [];
 	private drawing = false;
@@ -398,11 +403,32 @@ export class CanvasModeSession {
 		const wasKnown = new Set(this.state.annotations.keys());
 		const id = this.state.addStroke(raw);
 
-		if (!wasKnown.has(id)) {
+		const isNew = !wasKnown.has(id);
+		let anchorOffset: number;
+		if (isNew) {
 			const text = this.deps.view.state.doc.toString();
 			const penDownOffset = this.posAtOverlayPoint(raw[0] as RawPoint) ?? text.length;
-			this.newAnchorOffset.set(id, findInsertionPoint(text, penDownOffset));
+			anchorOffset = findInsertionPoint(text, penDownOffset);
+			this.newAnchorOffset.set(id, anchorOffset);
+		} else {
+			anchorOffset = this.currentAnchorOffsetForKnown(id);
 		}
+		// Resolved and cached right here, while the pen has just lifted and the
+		// view is guaranteed live/attached — never at the later, debounced (or
+		// session-teardown-triggered) flush, whose timing relative to the view
+		// still being attached is not guaranteed. Switching away from the
+		// note's tab tears down its EditorView, and the flush that
+		// CanvasModeSession.destroy() awaits could run after that teardown; a
+		// resolveAnchorPoint() call at that point can return null (or, on
+		// some Obsidian/WebKit versions, throw), which — before this cache
+		// existed — either saved at a wrong (0,0) anchor or, if it threw,
+		// aborted buildEntry() before saveDirtyAnnotations() ever ran, losing
+		// the annotation's strokes entirely (on-device report: Canvas Mode
+		// scribbles not persisted across close/reopen, unlike Block Mode's
+		// ink blocks, which save on an explicit user action instead of a
+		// deferred flush).
+		const anchor = this.resolveAnchorPoint(anchorOffset);
+		if (anchor) this.savedAnchor.set(id, anchor);
 
 		this.redraw();
 		this.queue.schedule(id);
@@ -421,7 +447,11 @@ export class CanvasModeSession {
 		const anchorOffset = isNew
 			? (this.newAnchorOffset.get(id) ?? this.deps.view.state.doc.length)
 			: this.currentAnchorOffsetForKnown(id);
-		const anchor = this.resolveAnchorPoint(anchorOffset) ?? { x: 0, y: 0 };
+		// The cache from onPenEnd() is preferred; resolveAnchorPoint() here is
+		// only a best-effort fallback for the (should-be-unreachable) case of
+		// a dirty id with no cached anchor, not the primary path — see
+		// onPenEnd()'s comment.
+		const anchor = this.savedAnchor.get(id) ?? this.resolveAnchorPoint(anchorOffset) ?? { x: 0, y: 0 };
 		const relative = strokes.map((s) => ({
 			points: s.points.map((p) => ({ ...p, x: p.x - anchor.x, y: p.y - anchor.y })),
 		}));

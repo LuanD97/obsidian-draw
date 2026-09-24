@@ -78,18 +78,18 @@ export default class DrawPlugin extends Plugin {
 		this.registerEvent(
 			this.app.workspace.on('active-leaf-change', () => {
 				debugLog('active-leaf-change');
-				this.syncCanvasSession();
+				void this.syncCanvasSession();
 			}),
 		);
 		this.registerEvent(
 			this.app.workspace.on('file-open', (file) => {
 				debugLog('file-open', { path: file?.path ?? null });
-				this.syncCanvasSession();
+				void this.syncCanvasSession();
 			}),
 		);
 		this.app.workspace.onLayoutReady(() => {
 			debugLog('onLayoutReady');
-			this.syncCanvasSession();
+			void this.syncCanvasSession();
 		});
 
 		// TEMPORARY: catches anything Obsidian's own file-open pipeline might
@@ -104,7 +104,7 @@ export default class DrawPlugin extends Plugin {
 
 	onunload(): void {
 		void this.overlayHandle?.close({ reason: 'unload' });
-		this.deactivateCanvasSession();
+		void this.deactivateCanvasSession();
 		if (this.debugOnError) window.removeEventListener('error', this.debugOnError);
 		if (this.debugOnRejection) window.removeEventListener('unhandledrejection', this.debugOnRejection);
 	}
@@ -137,7 +137,7 @@ export default class DrawPlugin extends Plugin {
 		if (nextEnabled) {
 			this.activateCanvasSession(view, file);
 		} else {
-			this.deactivateCanvasSession();
+			await this.deactivateCanvasSession();
 		}
 	}
 
@@ -159,7 +159,14 @@ export default class DrawPlugin extends Plugin {
 	// EditorView entirely, so the reopened note silently never got Canvas
 	// Mode back. Checking the live plugin's own session is the source of
 	// truth regardless of what this class's cache still remembers.
-	private syncCanvasSession(): void {
+	// Async, and awaited by its callers (active-leaf-change/file-open/
+	// onLayoutReady), so that deactivateCanvasSession's pending save (research.md
+	// R19) actually lands before this function goes on to decide whether to
+	// activate a session for whatever note is now active — including a fast
+	// close-then-reopen of the *same* note, which would otherwise risk the new
+	// session's loadStatic() reading the file before the old session's write
+	// to it had completed.
+	private async syncCanvasSession(): Promise<void> {
 		const view = this.app.workspace.getActiveViewOfType(MarkdownView);
 		const file = view?.file ?? null;
 		const enabled = file ? isCanvasModeEnabled(this.app.metadataCache.getFileCache(file)?.frontmatter) : false;
@@ -171,7 +178,7 @@ export default class DrawPlugin extends Plugin {
 		});
 
 		if (this.activeCanvasFile && (this.activeCanvasFile !== file || !enabled)) {
-			this.deactivateCanvasSession();
+			await this.deactivateCanvasSession();
 		}
 
 		if (!enabled || !file || !view) return;
@@ -260,21 +267,28 @@ export default class DrawPlugin extends Plugin {
 		}
 	}
 
-	private deactivateCanvasSession(): void {
+	// Awaited by every caller (research.md R19): destroy() flushes any pending
+	// debounced save, and not waiting for that here previously meant a fast
+	// close-then-reopen of the same note could race ahead of that save's
+	// vault.process write, or leave it running against a session/view already
+	// being torn down elsewhere. onunload() is the one exception (Obsidian
+	// doesn't await it), where this is still best-effort.
+	private async deactivateCanvasSession(): Promise<void> {
 		debugLog('deactivateCanvasSession', {
 			path: this.activeCanvasFile?.path ?? null,
 			hadSession: !!this.activeCanvasPlugin?.session,
 		});
 		try {
 			if (this.activeCanvasPlugin?.session) {
-				void this.activeCanvasPlugin.session
+				const session = this.activeCanvasPlugin.session;
+				this.activeCanvasPlugin.session = null;
+				await session
 					.destroy()
 					.then(() => debugLog('deactivateCanvasSession: async destroy() resolved'))
 					.catch((e: unknown) => {
 						debugLog('deactivateCanvasSession: async destroy() rejected', { error: e });
 						console.error('Canvas Mode: failed to tear down cleanly', e);
 					});
-				this.activeCanvasPlugin.session = null;
 			}
 		} catch (e) {
 			console.error('Canvas Mode: failed to tear down cleanly', e);
